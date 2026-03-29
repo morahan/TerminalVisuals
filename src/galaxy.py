@@ -37,6 +37,9 @@ class GalaxyVisualizer(BaseVisualizer):
         self.tightness = 0.3
         self.stars = self._generate_stars()
 
+    def _on_resize(self) -> None:
+        self.stars = self._generate_stars()
+
     def _get_char(self, name: str) -> str:
         if self.ascii_mode and name in self.CHARS:
             key = f"{name}_ascii"

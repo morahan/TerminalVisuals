@@ -49,13 +49,9 @@ class BaseVisualizer(ABC):
         ascii_mode: bool = False,
         oneshot: bool = False,
     ):
-        # Auto-size to terminal if size=0
-        if size <= 0:
-            try:
-                ts = os.get_terminal_size()
-                size = min(ts.columns, ts.lines - 3)
-            except OSError:
-                size = 25
+        self.auto_size = size <= 0
+        if self.auto_size:
+            size = self._terminal_fit_size()
         self.size = size
         self.speed = speed
         self.brightness = brightness
@@ -64,6 +60,26 @@ class BaseVisualizer(ABC):
         self.frame = 0
         self.running = True
         self._old_term_settings: Optional[list] = None
+
+    def _terminal_fit_size(self) -> int:
+        try:
+            ts = os.get_terminal_size()
+            return min(ts.columns, ts.lines - 3)
+        except OSError:
+            return 25
+
+    def _update_size(self) -> None:
+        """Re-fit size to current terminal dimensions. Called each frame when auto_size is on."""
+        if not self.auto_size:
+            return
+        new_size = self._terminal_fit_size()
+        if new_size != self.size:
+            self.size = new_size
+            self._on_resize()
+
+    def _on_resize(self) -> None:
+        """Override in subclasses to react to size changes."""
+        pass
 
     def clear_screen(self) -> str:
         return f"{self.ANSI_CLEAR}{self.ANSI_HOME}"
@@ -109,6 +125,7 @@ class BaseVisualizer(ABC):
             if event != INPUT_NONE and on_event:
                 on_event(event)
 
+            self._update_size()
             output = self.clear_screen() + self.render_frame()
             sys.stdout.write(output)
             sys.stdout.flush()

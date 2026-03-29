@@ -45,7 +45,6 @@ class App:
             SpiralVisualizer(**common, arm_gap=arm_gap, trail=trail),
         ]
         self.index = MODE_NAMES.index(start_mode) if start_mode in MODE_NAMES else 0
-        self.active_slider = 0
         self.enjoy_mode = False
         self.total_frames = 0  # tracks frames across mode switches for hint fade
 
@@ -72,13 +71,8 @@ class App:
 
                 if result == INPUT_QUIT:
                     break
-                elif result == INPUT_LEFT:
-                    self.index = (self.index - 1) % len(self.visualizers)
-                    self.active_slider = 0
-                    self.current.reset()
-                elif result == INPUT_RIGHT:
+                elif result == INPUT_SPACE:
                     self.index = (self.index + 1) % len(self.visualizers)
-                    self.active_slider = 0
                     self.current.reset()
         except KeyboardInterrupt:
             pass
@@ -95,14 +89,14 @@ class App:
 
     def _handle_event(self, event: int) -> bool:
         vis = self.current
-        if event == INPUT_UP:
-            vis.adjust_slider(self.active_slider, 1)
+        if event == INPUT_LEFT:
+            vis.adjust_slider(0, -1)
+        elif event == INPUT_RIGHT:
+            vis.adjust_slider(0, 1)
+        elif event == INPUT_UP:
+            vis.adjust_slider(1, 1)
         elif event == INPUT_DOWN:
-            vis.adjust_slider(self.active_slider, -1)
-        elif event == INPUT_SELECT_1:
-            self.active_slider = 0
-        elif event == INPUT_SELECT_2:
-            self.active_slider = 1
+            vis.adjust_slider(1, -1)
         elif event == INPUT_ENJOY:
             self.enjoy_mode = not self.enjoy_mode
         return True
@@ -121,37 +115,31 @@ class App:
 
         vis = self.current
         ascii_mode = vis.ascii_mode
-        left = "<" if ascii_mode else "\u25C0"
-        right = ">" if ascii_mode else "\u25B6"
         bar_full = "=" if ascii_mode else "\u2588"
         bar_empty = "-" if ascii_mode else "\u2591"
         sep_char = "-" if ascii_mode else "\u2500"
+        lr_arrow = "<>" if ascii_mode else "\u2190\u2192"
+        ud_arrow = "^v" if ascii_mode else "\u2191\u2193"
 
         # --- Slider line ---
         slider_parts = []
+        arrows = [lr_arrow, ud_arrow]
         for i, s in enumerate(vis.sliders):
             val = getattr(vis, s.attr)
             ratio = (val - s.min_val) / max(0.001, s.max_val - s.min_val)
             bar_len = 10
             filled = int(ratio * bar_len)
             bar = bar_full * filled + bar_empty * (bar_len - filled)
-
             val_str = str(int(val)) if s.fmt == "d" else f"{val:{s.fmt}}"
-
-            if i == self.active_slider:
-                # Active slider: bright
-                prefix = "\033[96m\u25B8 " if not ascii_mode else "\033[96m> "
-                slider_parts.append(f"{prefix}{s.name}: [{bar}] {val_str}\033[0m")
-            else:
-                # Inactive slider: dim
-                prefix = "  "
-                slider_parts.append(f"\033[90m{prefix}{s.name}: [{bar}] {val_str}\033[0m")
+            axis = arrows[i] if i < len(arrows) else ""
+            slider_parts.append(f"\033[96m{axis} {s.name}\033[0m [{bar}] {val_str}")
 
         hud_sliders = "   ".join(slider_parts)
 
         # --- Mode nav line ---
         name = MODE_NAMES[self.index].upper()
-        mode_str = f" {left}  {name}  {right} "
+        dot = "o" if ascii_mode else "\u25CF"
+        mode_str = f" {dot}  {name}  {dot} "
 
         # --- Separator line ---
         sep_line = sep_char * cols
@@ -167,7 +155,7 @@ class App:
             else:
                 hint_color = ""
             if hint_color:
-                hint_str = f"{hint_color}\u2190\u2192 modes   \u2191\u2193 adjust   1/2 slider   e enjoy   q quit\033[0m"
+                hint_str = f"{hint_color}space next   \u2190\u2192 {vis.sliders[0].name.lower() if vis.sliders else ''}   \u2191\u2193 {vis.sliders[1].name.lower() if len(vis.sliders) > 1 else ''}   e enjoy   q quit\033[0m"
 
         # Layout: 3 lines at bottom (separator, sliders, mode)
         # Optional 4th line for hint

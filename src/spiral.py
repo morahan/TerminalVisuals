@@ -55,6 +55,9 @@ class SpiralVisualizer(BaseVisualizer):
         self.b = 0.25 / max(1, arm_gap)  # spiral tightness
         self.max_radius = (size // 2) - 1
 
+    def _on_resize(self) -> None:
+        self.max_radius = (self.size // 2) - 1
+
     def _get_char(self, name: str) -> str:
         if self.ascii_mode:
             key = f"{name}_ascii"
