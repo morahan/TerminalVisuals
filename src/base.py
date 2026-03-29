@@ -168,21 +168,23 @@ class BaseVisualizer(ABC):
                 return INPUT_SPACE
             if ch == "\x1b":
                 # Arrow keys send 3-byte sequences: ESC [ A/B/C/D
-                if select.select([sys.stdin], [], [], 0.1)[0]:
-                    ch2 = sys.stdin.read(1)
-                    if ch2 == "[" and select.select([sys.stdin], [], [], 0.1)[0]:
-                        ch3 = sys.stdin.read(1)
-                        if ch3 == "D":
-                            return INPUT_LEFT
-                        if ch3 == "C":
-                            return INPUT_RIGHT
-                        if ch3 == "A":
-                            return INPUT_UP
-                        if ch3 == "B":
-                            return INPUT_DOWN
-                        return INPUT_NONE
-                # Bare ESC
-                return INPUT_QUIT
+                # Read remaining bytes with generous timeout
+                buf = ""
+                for _ in range(2):
+                    if select.select([sys.stdin], [], [], 0.3)[0]:
+                        buf += sys.stdin.read(1)
+                    else:
+                        break
+                if buf == "[A":
+                    return INPUT_UP
+                if buf == "[B":
+                    return INPUT_DOWN
+                if buf == "[C":
+                    return INPUT_RIGHT
+                if buf == "[D":
+                    return INPUT_LEFT
+                # Bare ESC or unknown sequence — ignore
+                return INPUT_NONE
         except (OSError, IOError):
             return INPUT_NONE
         return INPUT_NONE
