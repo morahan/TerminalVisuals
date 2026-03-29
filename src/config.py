@@ -25,8 +25,15 @@ class GalaxyConfig(BaseConfig):
 
 
 @dataclass
+class SpiralConfig(BaseConfig):
+    arm_gap: int = 2
+    trail: int = 4
+
+
+@dataclass
 class VisualizerConfig:
-    mode: Literal["waves", "galaxy"]
+    mode: Literal["waves", "galaxy", "spiral"]
     base: BaseConfig
     wave: WaveConfig | None = None
     galaxy: GalaxyConfig | None = None
+    spiral: SpiralConfig | None = None

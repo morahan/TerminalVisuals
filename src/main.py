@@ -1,16 +1,15 @@
 import argparse
 
-from src.waves import WaveVisualizer
-from src.galaxy import GalaxyVisualizer
+from src.app import App
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Terminal Visualizer")
     parser.add_argument(
         "--mode",
-        choices=["waves", "galaxy"],
+        choices=["waves", "galaxy", "spiral"],
         default="waves",
-        help="Visualization mode (default: waves)",
+        help="Starting visualization mode (default: waves)",
     )
     parser.add_argument("--size", type=int, default=25, help="Grid size (default: 25)")
     parser.add_argument(
@@ -44,35 +43,32 @@ def parse_args():
         "--arm-gap", type=int, default=2, help="Space between spiral arms (default: 2)"
     )
 
+    spiral_group = parser.add_argument_group("Spiral Options")
+    spiral_group.add_argument(
+        "--trail", type=int, default=4, help="Glow trail length (default: 4)"
+    )
+
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
 
-    if args.mode == "waves":
-        visualizer = WaveVisualizer(
-            size=args.size,
-            speed=args.speed,
-            brightness=args.brightness,
-            ascii_mode=args.ascii,
-            oneshot=args.oneshot,
-            wave_count=args.wave_count,
-            foam=not args.no_foam,
-        )
-    else:
-        visualizer = GalaxyVisualizer(
-            size=args.size,
-            speed=args.speed,
-            brightness=args.brightness,
-            ascii_mode=args.ascii,
-            oneshot=args.oneshot,
-            arms=args.arms,
-            twinkle=not args.no_twinkle,
-            arm_gap=args.arm_gap,
-        )
-
-    visualizer.run()
+    app = App(
+        start_mode=args.mode,
+        size=args.size,
+        speed=args.speed,
+        brightness=args.brightness,
+        ascii_mode=args.ascii,
+        oneshot=args.oneshot,
+        wave_count=args.wave_count,
+        foam=not args.no_foam,
+        arms=args.arms,
+        twinkle=not args.no_twinkle,
+        arm_gap=args.arm_gap,
+        trail=args.trail,
+    )
+    app.run()
 
 
 if __name__ == "__main__":

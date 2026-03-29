@@ -7,6 +7,13 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 
+# Input event constants
+INPUT_NONE = 0
+INPUT_QUIT = 1
+INPUT_LEFT = 2
+INPUT_RIGHT = 3
+
+
 class BaseVisualizer(ABC):
     ANSI_CLEAR = "\033[2J"
     ANSI_HOME = "\033[H"
@@ -32,6 +39,7 @@ class BaseVisualizer(ABC):
         self.frame = 0
         self.running = True
         self._old_term_settings: Optional[list] = None
+        self._switch_direction: int = INPUT_NONE  # set when arrow key pressed
 
     def clear_screen(self) -> str:
         return f"{self.ANSI_CLEAR}{self.ANSI_HOME}"
@@ -40,37 +48,68 @@ class BaseVisualizer(ABC):
     def render_frame(self) -> str:
         pass
 
+    def reset(self) -> None:
+        """Reset frame counter for reuse when switching modes."""
+        self.frame = 0
+        self.running = True
+        self._switch_direction = INPUT_NONE
+
     def run(self) -> None:
+        """Standalone run with full terminal setup/teardown."""
         self._enter_alt_screen()
         self._hide_cursor()
         self._set_raw_mode()
         try:
-            while self.running:
-                if self._check_quit():
-                    break
-
-                output = self.clear_screen() + self.render_frame()
-                sys.stdout.write(output)
-                sys.stdout.flush()
-
-                if self.oneshot:
-                    break
-
-                time.sleep(1.0 / self.speed)
-                self.frame += 1
+            self.run_loop()
         except KeyboardInterrupt:
             pass
         finally:
             self._cleanup()
 
-    def _check_quit(self) -> bool:
+    def run_loop(self) -> int:
+        """Run the render loop. Returns INPUT_QUIT, INPUT_LEFT, or INPUT_RIGHT."""
+        self.running = True
+        self._switch_direction = INPUT_NONE
+        while self.running:
+            event = self._check_input()
+            if event == INPUT_QUIT:
+                return INPUT_QUIT
+            if event in (INPUT_LEFT, INPUT_RIGHT):
+                self._switch_direction = event
+                return event
+
+            output = self.clear_screen() + self.render_frame()
+            sys.stdout.write(output)
+            sys.stdout.flush()
+
+            if self.oneshot:
+                break
+
+            time.sleep(1.0 / self.speed)
+            self.frame += 1
+        return INPUT_QUIT
+
+    def _check_input(self) -> int:
         if self._old_term_settings is None:
-            return False
+            return INPUT_NONE
         if select.select([sys.stdin], [], [], 0)[0]:
             ch = sys.stdin.read(1)
-            if ch in ("q", "Q", "\x1b"):
-                return True
-        return False
+            if ch in ("q", "Q"):
+                return INPUT_QUIT
+            if ch == "\x1b":
+                # Could be ESC or start of arrow key sequence
+                if select.select([sys.stdin], [], [], 0.05)[0]:
+                    ch2 = sys.stdin.read(1)
+                    if ch2 == "[":
+                        if select.select([sys.stdin], [], [], 0.05)[0]:
+                            ch3 = sys.stdin.read(1)
+                            if ch3 == "D":  # left arrow
+                                return INPUT_LEFT
+                            if ch3 == "C":  # right arrow
+                                return INPUT_RIGHT
+                # Bare ESC (no follow-up bytes)
+                return INPUT_QUIT
+        return INPUT_NONE
 
     def _set_raw_mode(self) -> None:
         try:

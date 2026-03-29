@@ -1,28 +1,28 @@
 # TerminalVisuals commands
 
-# Run default spiral
+# Run (default waves, use arrows to switch)
 run:
-    python -m src.main
+    freio
 
-# Rainbow mode
-rainbow:
-    python -m src.main --colors rainbow
+# Start in galaxy mode
+galaxy:
+    freio --mode galaxy
 
-# Big rainbow
+# Start in spiral (droid) mode
+spiral:
+    freio --mode spiral
+
+# Big and fast
 big:
-    python -m src.main --colors rainbow --size 41 --speed 3
-
-# Fast red spiral
-fire:
-    python -m src.main --colors red --speed 2 --trail 5
+    freio --size 41 --speed 8
 
 # ASCII mode
 ascii:
-    python -m src.main --ascii
+    freio --ascii
 
 # One-shot (no loop)
 once:
-    python -m src.main --oneshot
+    freio --oneshot
 
 # Claude prompt history
 claude-history:
