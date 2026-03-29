@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-tv = "src.main:main"
+freio = "src.main:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

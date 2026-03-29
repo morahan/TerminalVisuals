@@ -12,13 +12,6 @@ class WaveVisualizer(BaseVisualizer):
         "deep": "  ",
     }
 
-    COLORS = {
-        "deep": "\033[36m",
-        "mid": "\033[96m",
-        "foam": "\033[97m",
-        "bright": "\033[97;1m",
-    }
-
     def __init__(
         self,
         size: int = 25,
