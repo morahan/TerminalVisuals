@@ -21,13 +21,13 @@ freio --size 31          # fixed grid size
 
 | Key            | Action                          |
 |----------------|---------------------------------|
-| Left / Right   | Switch visualization mode       |
-| Up / Down      | Adjust active slider            |
-| 1 / 2          | Select which slider to adjust   |
+| Spacebar       | Cycle to next visualization     |
+| Left / Right   | Adjust slider 1 (shape)         |
+| Up / Down      | Adjust slider 2 (feel)          |
 | e              | Toggle enjoy mode (hide HUD)    |
 | q / Esc        | Quit                            |
 
-A brief hint overlay appears on launch and fades after a few seconds.
+Every input maps to exactly one function — no modal selection needed. A brief hint overlay appears on launch and fades after a few seconds.
 
 ## Modes & Sliders
 
