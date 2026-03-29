@@ -1,6 +1,6 @@
 import math
 
-from src.base import BaseVisualizer, Slider
+from src.base import BaseVisualizer, Slider, CHAR_ASPECT
 
 
 class SpiralVisualizer(BaseVisualizer):
@@ -53,10 +53,10 @@ class SpiralVisualizer(BaseVisualizer):
         self.trail = trail
         self.growth = 0.3  # expansion speed per frame
         self.b = 0.25 / max(1, arm_gap)  # spiral tightness
-        self.max_radius = (size // 2) - 1
+        self.max_radius = min(self.width // 2, int(self.height / CHAR_ASPECT / 2)) - 1
 
     def _on_resize(self) -> None:
-        self.max_radius = (self.size // 2) - 1
+        self.max_radius = min(self.width // 2, int(self.height / CHAR_ASPECT / 2)) - 1
 
     def _get_char(self, name: str) -> str:
         if self.ascii_mode:
@@ -68,10 +68,9 @@ class SpiralVisualizer(BaseVisualizer):
         return f"\033[{code}m"
 
     def render_frame(self) -> str:
-        size = self.size
-        cx = size // 2
-        cy = size // 2
-        grid: list[list[str]] = [[" " for _ in range(size)] for _ in range(size)]
+        cx = self.width // 2
+        cy = self.height // 2
+        grid: list[list[str]] = [[" " for _ in range(self.width)] for _ in range(self.height)]
 
         # How far the spiral has expanded (grows over time, then resets)
         cycle_length = 200
@@ -95,12 +94,12 @@ class SpiralVisualizer(BaseVisualizer):
                 break
 
             x = r * math.cos(theta)
-            y = r * math.sin(theta) * 0.55  # aspect ratio correction
+            y = r * math.sin(theta) * CHAR_ASPECT  # aspect ratio correction
 
             gx = cx + int(round(x))
             gy = cy + int(round(y))
 
-            if 0 <= gx < size and 0 <= gy < size:
+            if 0 <= gx < self.width and 0 <= gy < self.height:
                 age = (max_theta - theta) + fade_amount
                 char, color = self._style_point(r, age)
                 if char.strip():
@@ -119,7 +118,7 @@ class SpiralVisualizer(BaseVisualizer):
         lines = []
         for row in grid:
             lines.append("".join(row))
-        return "\n".join(lines) + f"\n\033[{size + 1};1H"
+        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
 
     def _style_point(self, radius: float, age: float) -> tuple[str, str]:
         ring_idx = int(radius / max(1, self.arm_gap))

@@ -1,7 +1,7 @@
 import math
 import random
 
-from src.base import BaseVisualizer, Slider
+from src.base import BaseVisualizer, Slider, CHAR_ASPECT
 
 
 class GalaxyVisualizer(BaseVisualizer):
@@ -49,8 +49,8 @@ class GalaxyVisualizer(BaseVisualizer):
     def _generate_stars(self) -> dict:
         stars = {}
         random.seed(42)
-        for y in range(self.size):
-            for x in range(self.size):
+        for y in range(self.height):
+            for x in range(self.width):
                 if random.random() < 0.1:
                     stars[(y, x)] = random.random()
         return stars
@@ -62,9 +62,10 @@ class GalaxyVisualizer(BaseVisualizer):
         return f"\033[{code}m"
 
     def _in_spiral_arm(self, x: float, y: float, arm_idx: int) -> tuple[bool, float]:
-        center = self.size / 2
-        dx = x - center
-        dy = y - center
+        cx = self.width / 2
+        cy = self.height / 2
+        dx = x - cx
+        dy = (y - cy) / CHAR_ASPECT  # correct for terminal char aspect ratio
 
         r = math.sqrt(dx * dx + dy * dy)
         if r < 0.5:
@@ -82,16 +83,17 @@ class GalaxyVisualizer(BaseVisualizer):
 
     def render_frame(self) -> str:
         lines = []
-        center = self.size / 2
+        cx = self.width / 2
+        cy = self.height / 2
 
-        for y in range(self.size):
+        for y in range(self.height):
             line = ""
-            for x in range(self.size):
-                dx = x - center
-                dy = y - center
+            for x in range(self.width):
+                dx = x - cx
+                dy = (y - cy) / CHAR_ASPECT
                 r = math.sqrt(dx * dx + dy * dy)
 
-                if r < 2:
+                if r < 3:
                     char = self._get_char("bulge")
                     color = self._color("97")
                 else:
@@ -123,4 +125,4 @@ class GalaxyVisualizer(BaseVisualizer):
 
             lines.append(line)
 
-        return "\n".join(lines) + f"\n\033[{int(self.size) + 1};1H"
+        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"

@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 
+# Terminal characters are ~2x taller than wide
+CHAR_ASPECT = 0.5
+HUD_ROWS = 3
+
 # Input event constants
 INPUT_NONE = 0
 INPUT_QUIT = 1
@@ -51,8 +55,10 @@ class BaseVisualizer(ABC):
     ):
         self.auto_size = size <= 0
         if self.auto_size:
-            size = self._terminal_fit_size()
-        self.size = size
+            self.width, self.height = self._terminal_fit_dims()
+        else:
+            self.width = size
+            self.height = size
         self.speed = speed
         self.brightness = brightness
         self.ascii_mode = ascii_mode
@@ -61,20 +67,21 @@ class BaseVisualizer(ABC):
         self.running = True
         self._old_term_settings: Optional[list] = None
 
-    def _terminal_fit_size(self) -> int:
+    def _terminal_fit_dims(self) -> tuple[int, int]:
         try:
             ts = os.get_terminal_size()
-            return min(ts.columns, ts.lines - 3)
+            return ts.columns, ts.lines - HUD_ROWS
         except OSError:
-            return 25
+            return 80, 22
 
     def _update_size(self) -> None:
         """Re-fit size to current terminal dimensions. Called each frame when auto_size is on."""
         if not self.auto_size:
             return
-        new_size = self._terminal_fit_size()
-        if new_size != self.size:
-            self.size = new_size
+        new_w, new_h = self._terminal_fit_dims()
+        if new_w != self.width or new_h != self.height:
+            self.width = new_w
+            self.height = new_h
             self._on_resize()
 
     def _on_resize(self) -> None:

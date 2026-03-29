@@ -46,23 +46,25 @@ class WaveVisualizer(BaseVisualizer):
 
     def render_frame(self) -> str:
         lines = []
-        center = self.size // 2
+        center_x = self.width // 4  # each cell is 2 chars wide
+        center_y = self.height // 2
+        x_cells = self.width // 2
 
-        for y in range(self.size):
+        for y in range(self.height):
             line = ""
-            for x in range(self.size):
+            for x in range(x_cells):
                 char = " "
                 color = ""
 
                 for wave_idx in range(self.wave_count):
                     phase_offset = wave_idx * 0.8
-                    wave_y = center + wave_idx * 2
+                    wave_y = center_y + wave_idx * 2
 
                     amp = self.amplitude + wave_idx * 0.5
                     freq = self.frequency + wave_idx * 0.1
 
                     wave_pos = math.sin(
-                        (x - center) * freq + self.frame * 0.15 + phase_offset
+                        (x - center_x) * freq + self.frame * 0.15 + phase_offset
                     ) * amp
 
                     crest_y = wave_y + wave_pos
@@ -90,4 +92,4 @@ class WaveVisualizer(BaseVisualizer):
 
             lines.append(line)
 
-        return "\n".join(lines) + f"\n\033[{self.size + 1};1H"
+        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
