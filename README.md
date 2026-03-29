@@ -57,3 +57,7 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 ## Requirements
 
 Python 3.10+ (no external dependencies)
+
+## Credits
+
+Made with love by [Exponent Ventures](https://exponentventures.com) and [Freio Labs](https://freiolabs.com).
