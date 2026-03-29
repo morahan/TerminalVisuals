@@ -65,7 +65,7 @@ class GalaxyVisualizer(BaseVisualizer):
         cx = self.width / 2
         cy = self.height / 2
         dx = x - cx
-        dy = (y - cy) / CHAR_ASPECT  # correct for terminal char aspect ratio
+        dy = y - cy
 
         r = math.sqrt(dx * dx + dy * dy)
         if r < 0.5:
@@ -77,7 +77,7 @@ class GalaxyVisualizer(BaseVisualizer):
         target_angle = arm_angle + r * self.tightness
 
         angle_diff = abs((angle - target_angle + math.pi) % (2 * math.pi) - math.pi)
-        threshold = self.arm_gap * 0.4
+        threshold = self.arm_gap * 0.6
 
         return angle_diff < threshold, r
 
