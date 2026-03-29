@@ -1,6 +1,6 @@
 import math
 
-from src.base import BaseVisualizer
+from src.base import BaseVisualizer, Slider
 
 
 class WaveVisualizer(BaseVisualizer):
@@ -11,6 +11,11 @@ class WaveVisualizer(BaseVisualizer):
         "foam_ascii": "^",
         "deep": "  ",
     }
+
+    sliders = [
+        Slider(name="Amplitude", attr="amplitude", min_val=1.0, max_val=6.0, step=0.5),
+        Slider(name="Frequency", attr="frequency", min_val=0.1, max_val=0.8, step=0.05, fmt=".2f"),
+    ]
 
     def __init__(
         self,
@@ -25,6 +30,8 @@ class WaveVisualizer(BaseVisualizer):
         super().__init__(size, speed, brightness, ascii_mode, oneshot)
         self.wave_count = wave_count
         self.foam = foam
+        self.amplitude = 3.0
+        self.frequency = 0.3
 
     def _get_char(self, name: str) -> str:
         if self.ascii_mode and name in self.CHARS:
@@ -40,7 +47,6 @@ class WaveVisualizer(BaseVisualizer):
     def render_frame(self) -> str:
         lines = []
         center = self.size // 2
-        max_y = self.size - 1
 
         for y in range(self.size):
             line = ""
@@ -52,12 +58,12 @@ class WaveVisualizer(BaseVisualizer):
                     phase_offset = wave_idx * 0.8
                     wave_y = center + wave_idx * 2
 
-                    amplitude = 2 + wave_idx * 0.5
-                    frequency = 0.3 + wave_idx * 0.1
+                    amp = self.amplitude + wave_idx * 0.5
+                    freq = self.frequency + wave_idx * 0.1
 
                     wave_pos = math.sin(
-                        (x - center) * frequency + self.frame * 0.15 + phase_offset
-                    ) * amplitude
+                        (x - center) * freq + self.frame * 0.15 + phase_offset
+                    ) * amp
 
                     crest_y = wave_y + wave_pos
                     foam_y = crest_y - 0.5

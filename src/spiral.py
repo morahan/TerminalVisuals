@@ -1,10 +1,15 @@
 import math
 
-from src.base import BaseVisualizer
+from src.base import BaseVisualizer, Slider
 
 
 class SpiralVisualizer(BaseVisualizer):
     """Droid boot-sequence spiral — expands outward from center with glow trail."""
+
+    sliders = [
+        Slider(name="Trail", attr="trail", min_val=1, max_val=10, step=1, fmt="d"),
+        Slider(name="Growth", attr="growth", min_val=0.1, max_val=0.6, step=0.05, fmt=".2f"),
+    ]
 
     CHARS = {
         "bright": "◆",
@@ -46,7 +51,8 @@ class SpiralVisualizer(BaseVisualizer):
         super().__init__(size, speed, brightness, ascii_mode, oneshot)
         self.arm_gap = arm_gap
         self.trail = trail
-        self.b = 0.25 / max(1, arm_gap)  # spiral growth rate
+        self.growth = 0.3  # expansion speed per frame
+        self.b = 0.25 / max(1, arm_gap)  # spiral tightness
         self.max_radius = (size // 2) - 1
 
     def _get_char(self, name: str) -> str:
@@ -70,10 +76,10 @@ class SpiralVisualizer(BaseVisualizer):
         fade_start = cycle_length - 30
 
         if t < fade_start:
-            max_theta = t * 0.3
+            max_theta = t * self.growth
         else:
             # Fade phase: stop growing, age everything
-            max_theta = fade_start * 0.3
+            max_theta = fade_start * self.growth
 
         fade_amount = max(0, t - fade_start) * 0.3
 

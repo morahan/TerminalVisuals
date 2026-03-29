@@ -11,7 +11,7 @@ def parse_args():
         default="waves",
         help="Starting visualization mode (default: waves)",
     )
-    parser.add_argument("--size", type=int, default=25, help="Grid size (default: 25)")
+    parser.add_argument("--size", type=int, default=0, help="Grid size (0=auto-fit terminal)")
     parser.add_argument(
         "--speed", type=int, default=5, help="Animation speed, higher is faster (default: 5)"
     )

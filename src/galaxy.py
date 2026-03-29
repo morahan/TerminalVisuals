@@ -1,7 +1,7 @@
 import math
 import random
 
-from src.base import BaseVisualizer
+from src.base import BaseVisualizer, Slider
 
 
 class GalaxyVisualizer(BaseVisualizer):
@@ -13,6 +13,11 @@ class GalaxyVisualizer(BaseVisualizer):
         "dust": " ",
         "bulge": "█",
     }
+
+    sliders = [
+        Slider(name="Arms", attr="arms", min_val=1, max_val=8, step=1, fmt="d"),
+        Slider(name="Tightness", attr="tightness", min_val=0.1, max_val=1.0, step=0.05, fmt=".2f"),
+    ]
 
     def __init__(
         self,
@@ -29,6 +34,7 @@ class GalaxyVisualizer(BaseVisualizer):
         self.arms = arms
         self.twinkle = twinkle
         self.arm_gap = arm_gap
+        self.tightness = 0.3
         self.stars = self._generate_stars()
 
     def _get_char(self, name: str) -> str:
@@ -64,8 +70,7 @@ class GalaxyVisualizer(BaseVisualizer):
         angle = math.atan2(dy, dx)
         arm_angle = (2 * math.pi * arm_idx / self.arms) + (self.frame * 0.02)
 
-        tightness = 0.3
-        target_angle = arm_angle + r * tightness
+        target_angle = arm_angle + r * self.tightness
 
         angle_diff = abs((angle - target_angle + math.pi) % (2 * math.pi) - math.pi)
         threshold = self.arm_gap * 0.4

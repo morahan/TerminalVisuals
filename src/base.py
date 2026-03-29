@@ -1,10 +1,12 @@
+import os
 import select
 import sys
 import termios
 import time
 import tty
 from abc import ABC, abstractmethod
-from typing import Optional
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 
 # Input event constants
@@ -12,6 +14,20 @@ INPUT_NONE = 0
 INPUT_QUIT = 1
 INPUT_LEFT = 2
 INPUT_RIGHT = 3
+INPUT_UP = 4
+INPUT_DOWN = 5
+INPUT_ENJOY = 8
+INPUT_SPACE = 9
+
+
+@dataclass
+class Slider:
+    name: str
+    attr: str
+    min_val: float
+    max_val: float
+    step: float
+    fmt: str = ".1f"
 
 
 class BaseVisualizer(ABC):
@@ -23,14 +39,23 @@ class BaseVisualizer(ABC):
     ANSI_ALT_SCREEN_ON = "\033[?1049h"
     ANSI_ALT_SCREEN_OFF = "\033[?1049l"
 
+    sliders: list[Slider] = []
+
     def __init__(
         self,
-        size: int = 25,
+        size: int = 0,
         speed: int = 5,
         brightness: int = 100,
         ascii_mode: bool = False,
         oneshot: bool = False,
     ):
+        # Auto-size to terminal if size=0
+        if size <= 0:
+            try:
+                ts = os.get_terminal_size()
+                size = min(ts.columns, ts.lines - 3)
+            except OSError:
+                size = 25
         self.size = size
         self.speed = speed
         self.brightness = brightness
@@ -39,7 +64,6 @@ class BaseVisualizer(ABC):
         self.frame = 0
         self.running = True
         self._old_term_settings: Optional[list] = None
-        self._switch_direction: int = INPUT_NONE  # set when arrow key pressed
 
     def clear_screen(self) -> str:
         return f"{self.ANSI_CLEAR}{self.ANSI_HOME}"
@@ -49,13 +73,10 @@ class BaseVisualizer(ABC):
         pass
 
     def reset(self) -> None:
-        """Reset frame counter for reuse when switching modes."""
         self.frame = 0
         self.running = True
-        self._switch_direction = INPUT_NONE
 
     def run(self) -> None:
-        """Standalone run with full terminal setup/teardown."""
         self._enter_alt_screen()
         self._hide_cursor()
         self._set_raw_mode()
@@ -66,21 +87,34 @@ class BaseVisualizer(ABC):
         finally:
             self._cleanup()
 
-    def run_loop(self) -> int:
-        """Run the render loop. Returns INPUT_QUIT, INPUT_LEFT, or INPUT_RIGHT."""
+    def run_loop(
+        self,
+        on_frame: Optional[Callable] = None,
+        on_event: Optional[Callable[[int], bool]] = None,
+    ) -> int:
+        """Run render loop.
+
+        on_frame: called after each frame render (for HUD overlay).
+        on_event: called with event code for non-quit/non-nav events.
+                  Return True if event was handled (stay in loop).
+        Returns INPUT_QUIT or INPUT_SPACE.
+        """
         self.running = True
-        self._switch_direction = INPUT_NONE
         while self.running:
             event = self._check_input()
             if event == INPUT_QUIT:
                 return INPUT_QUIT
-            if event in (INPUT_LEFT, INPUT_RIGHT):
-                self._switch_direction = event
-                return event
+            if event == INPUT_SPACE:
+                return INPUT_SPACE
+            if event != INPUT_NONE and on_event:
+                on_event(event)
 
             output = self.clear_screen() + self.render_frame()
             sys.stdout.write(output)
             sys.stdout.flush()
+
+            if on_frame:
+                on_frame()
 
             if self.oneshot:
                 break
@@ -89,26 +123,51 @@ class BaseVisualizer(ABC):
             self.frame += 1
         return INPUT_QUIT
 
+    def adjust_slider(self, slider_idx: int, direction: int) -> None:
+        if slider_idx < 0 or slider_idx >= len(self.sliders):
+            return
+        s = self.sliders[slider_idx]
+        current = getattr(self, s.attr)
+        if direction > 0:
+            new_val = min(s.max_val, current + s.step)
+        else:
+            new_val = max(s.min_val, current - s.step)
+        if s.step == int(s.step) and s.min_val == int(s.min_val):
+            new_val = int(new_val)
+        setattr(self, s.attr, new_val)
+
     def _check_input(self) -> int:
         if self._old_term_settings is None:
             return INPUT_NONE
-        if select.select([sys.stdin], [], [], 0)[0]:
+        try:
+            if not select.select([sys.stdin], [], [], 0)[0]:
+                return INPUT_NONE
             ch = sys.stdin.read(1)
             if ch in ("q", "Q"):
                 return INPUT_QUIT
+            if ch in ("e", "E"):
+                return INPUT_ENJOY
+            if ch == " ":
+                return INPUT_SPACE
             if ch == "\x1b":
-                # Could be ESC or start of arrow key sequence
-                if select.select([sys.stdin], [], [], 0.05)[0]:
+                # Arrow keys send 3-byte sequences: ESC [ A/B/C/D
+                if select.select([sys.stdin], [], [], 0.1)[0]:
                     ch2 = sys.stdin.read(1)
-                    if ch2 == "[":
-                        if select.select([sys.stdin], [], [], 0.05)[0]:
-                            ch3 = sys.stdin.read(1)
-                            if ch3 == "D":  # left arrow
-                                return INPUT_LEFT
-                            if ch3 == "C":  # right arrow
-                                return INPUT_RIGHT
-                # Bare ESC (no follow-up bytes)
+                    if ch2 == "[" and select.select([sys.stdin], [], [], 0.1)[0]:
+                        ch3 = sys.stdin.read(1)
+                        if ch3 == "D":
+                            return INPUT_LEFT
+                        if ch3 == "C":
+                            return INPUT_RIGHT
+                        if ch3 == "A":
+                            return INPUT_UP
+                        if ch3 == "B":
+                            return INPUT_DOWN
+                        return INPUT_NONE
+                # Bare ESC
                 return INPUT_QUIT
+        except (OSError, IOError):
+            return INPUT_NONE
         return INPUT_NONE
 
     def _set_raw_mode(self) -> None:
