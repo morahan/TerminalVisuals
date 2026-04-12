@@ -10,12 +10,17 @@ from src.base import (
 from src.waves import WaveVisualizer
 from src.galaxy import GalaxyVisualizer
 from src.spiral import SpiralVisualizer
+from src.dyson import DysonVisualizer
+from src.aurora import AuroraVisualizer
+from src.ember import EmberVisualizer
+from src.ripple import RippleVisualizer
+from src.zen import ZenVisualizer
 
 
-MODE_NAMES = ["waves", "galaxy", "spiral"]
+MODE_NAMES = ["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple", "zen"]
 
 # Onboarding hint fades after this many frames
-HINT_FRAMES = 40
+HINT_FRAMES = 240
 
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
@@ -35,6 +40,16 @@ class App:
         twinkle: bool = True,
         arm_gap: int = 2,
         trail: int = 4,
+        spread: float = 0.30,
+        orbit_speed: float = 1.5,
+        curtains: int = 5,
+        shimmer: float = 1.5,
+        density: int = 80,
+        warmth: float = 1.5,
+        sources: int = 2,
+        wavelength: float = 4.0,
+        rake_width: int = 3,
+        zen_level: int = 4,
     ):
         common = dict(size=size, speed=speed, brightness=brightness,
                       ascii_mode=ascii_mode, oneshot=oneshot)
@@ -43,6 +58,11 @@ class App:
             WaveVisualizer(**common, wave_count=wave_count, foam=foam),
             GalaxyVisualizer(**common, arms=arms, twinkle=twinkle, arm_gap=arm_gap),
             SpiralVisualizer(**common, arm_gap=arm_gap, trail=trail),
+            DysonVisualizer(**common, spread=spread, orbit_speed=orbit_speed),
+            AuroraVisualizer(**common, curtains=curtains, shimmer=shimmer),
+            EmberVisualizer(**common, density=density, warmth=warmth),
+            RippleVisualizer(**common, sources=sources, wavelength=wavelength),
+            ZenVisualizer(**common, rake_width=rake_width, level=zen_level),
         ]
         self.index = MODE_NAMES.index(start_mode) if start_mode in MODE_NAMES else 0
         self.enjoy_mode = False
@@ -101,11 +121,11 @@ class App:
             self.enjoy_mode = not self.enjoy_mode
         return True
 
-    def _draw_hud(self) -> None:
+    def _draw_hud(self) -> str:
         self.total_frames += 1
 
         if self.enjoy_mode:
-            return
+            return ""
 
         try:
             cols = os.get_terminal_size().columns
@@ -186,5 +206,4 @@ class App:
             y_hint = y_sep - 1
             out.append(f"\033[{y_hint};1H\033[2K\033[{y_hint};{pad_h}H{hint_str}")
 
-        sys.stdout.write("".join(out))
-        sys.stdout.flush()
+        return "".join(out)
