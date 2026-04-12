@@ -10,6 +10,12 @@ class WaveVisualizer(BaseVisualizer):
         "foam": "^^",
         "foam_ascii": "^",
         "deep": "  ",
+        "water_near": "▓▓",
+        "water_near_ascii": "::",
+        "water_mid": "▒▒",
+        "water_mid_ascii": "--",
+        "water_deep": "░░",
+        "water_deep_ascii": "..",
     }
 
     sliders = [
@@ -55,6 +61,7 @@ class WaveVisualizer(BaseVisualizer):
             for x in range(x_cells):
                 char = " "
                 color = ""
+                min_depth = float('inf')
 
                 for wave_idx in range(self.wave_count):
                     phase_offset = wave_idx * 0.8
@@ -84,9 +91,26 @@ class WaveVisualizer(BaseVisualizer):
                         char = self._get_char("wave")
                         color = self._color("36")
 
+                    # Track depth below any wave surface
+                    depth = y - crest_y
+                    if depth > 0:
+                        min_depth = min(min_depth, depth)
+
                 if char == " ":
-                    char = self._get_char("deep")
-                    color = self._color("36")
+                    if min_depth < float('inf'):
+                        # Below a wave surface — shade by depth
+                        if min_depth < 2:
+                            char = self._get_char("water_near")
+                            color = self._color("36")
+                        elif min_depth < 5:
+                            char = self._get_char("water_mid")
+                            color = self._color("2;36")
+                        else:
+                            char = self._get_char("water_deep")
+                            color = self._color("2;34")
+                    else:
+                        char = self._get_char("deep")
+                        color = ""
 
                 line += f"{color}{char}{self.ANSI_RESET}" if color else char
 

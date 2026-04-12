@@ -12,6 +12,7 @@ from typing import Callable, Optional
 # Terminal characters are ~2x taller than wide
 CHAR_ASPECT = 0.5
 HUD_ROWS = 3
+TARGET_FPS = 30
 
 # Input event constants
 INPUT_NONE = 0
@@ -63,7 +64,7 @@ class BaseVisualizer(ABC):
         self.brightness = brightness
         self.ascii_mode = ascii_mode
         self.oneshot = oneshot
-        self.frame = 0
+        self.frame = 0.0
         self.running = True
         self._old_term_settings: Optional[list] = None
 
@@ -89,14 +90,14 @@ class BaseVisualizer(ABC):
         pass
 
     def clear_screen(self) -> str:
-        return f"{self.ANSI_CLEAR}{self.ANSI_HOME}"
+        return self.ANSI_HOME
 
     @abstractmethod
     def render_frame(self) -> str:
         pass
 
     def reset(self) -> None:
-        self.frame = 0
+        self.frame = 0.0
         self.running = True
 
     def run(self) -> None:
@@ -134,17 +135,18 @@ class BaseVisualizer(ABC):
 
             self._update_size()
             output = self.clear_screen() + self.render_frame()
-            sys.stdout.write(output)
-            sys.stdout.flush()
 
             if on_frame:
-                on_frame()
+                output += on_frame()
+
+            sys.stdout.buffer.write(output.encode())
+            sys.stdout.buffer.flush()
 
             if self.oneshot:
                 break
 
-            time.sleep(1.0 / self.speed)
-            self.frame += 1
+            time.sleep(1.0 / TARGET_FPS)
+            self.frame += self.speed / TARGET_FPS
         return INPUT_QUIT
 
     def adjust_slider(self, slider_idx: int, direction: int) -> None:
