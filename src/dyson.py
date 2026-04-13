@@ -10,8 +10,6 @@ class DysonVisualizer(BaseVisualizer):
     CHARS = {
         "sat": "\u2502",        # │
         "sat_ascii": "|",
-        "spawn": "\u00b7",      # · (materializing satellite)
-        "spawn_ascii": ".",
         "core": "\u25cf",       # ●
         "core_ascii": "*",
         "star": "\u00b7",       # ·
@@ -24,10 +22,9 @@ class DysonVisualizer(BaseVisualizer):
     ]
 
     SATS_PER_RING = 18
-    SPAWN_INTERVAL = 8  # frames between new satellites
+    SPAWN_INTERVAL = 8
     MAX_RINGS = 5
 
-    # Per-ring colors: (bright, normal, dim)
     PALETTE = [
         ("96;1", "36", "2;36"),   # cyan
         ("97;1", "37", "2;37"),   # white
@@ -36,7 +33,6 @@ class DysonVisualizer(BaseVisualizer):
         ("93;1", "33", "2;33"),   # yellow
     ]
 
-    # Per-ring orbital parameters: (beta_offset, speed_multiplier)
     RING_ORBITS = [
         (0.0,              1.0),
         (math.pi / 3,     -0.80),
@@ -59,9 +55,15 @@ class DysonVisualizer(BaseVisualizer):
         self.spread = spread
         self.orbit_speed = orbit_speed
         self.stars = self._generate_stars()
+        self._trail: dict[tuple[int, int], int] = {}  # (y, x) -> ring_idx
+
+    def reset(self) -> None:
+        super().reset()
+        self._trail.clear()
 
     def _on_resize(self) -> None:
         self.stars = self._generate_stars()
+        self._trail.clear()
 
     def _generate_stars(self) -> dict[tuple[int, int], float]:
         stars = {}
@@ -91,7 +93,6 @@ class DysonVisualizer(BaseVisualizer):
         sin_a, cos_a = math.sin(alpha), math.cos(alpha)
         sin_b, cos_b = math.sin(beta), math.cos(beta)
 
-        # Rotate around X by alpha, then around Y by beta
         y_rot = -z * sin_a
         z_rot = z * cos_a
         x_final = x * cos_b + z_rot * sin_b
@@ -106,11 +107,9 @@ class DysonVisualizer(BaseVisualizer):
         cy = self.height / 2.0
         R = min(self.width * 0.42, self.height / CHAR_ASPECT * 0.42)
 
-        # Total satellites spawned so far (monotonically increasing, never resets)
         max_sats = self.MAX_RINGS * self.SATS_PER_RING
-        total_spawned = min(self.frame // self.SPAWN_INTERVAL + 1, max_sats)
+        total_spawned = int(min(self.frame // self.SPAWN_INTERVAL + 1, max_sats))
 
-        # Subtle global camera breathing
         cam_a = 0.005 * math.sin(self.frame * 0.009)
         cam_b = 0.003 * math.sin(self.frame * 0.006)
 
@@ -118,8 +117,8 @@ class DysonVisualizer(BaseVisualizer):
         core_x = int(round(cx))
         core_y = int(round(cy))
 
-        # Collect satellite screen positions with depth
-        points = []  # (sx, sy, z, ring_idx, age)
+        # Collect satellite positions
+        points = []
         spawned = 0
         for ring_idx in range(self.MAX_RINGS):
             ring_count = min(self.SATS_PER_RING, total_spawned - spawned)
@@ -142,48 +141,54 @@ class DysonVisualizer(BaseVisualizer):
 
             spawned += ring_count
 
-        # Sort back-to-front for correct layering
+        # Update persistent trail (only grows, never shrinks)
+        for sx, sy, z, ring_idx, age in points:
+            if 0 <= sx < self.width and 0 <= sy < self.height:
+                self._trail[(sy, sx)] = ring_idx
+
+        # Sort active satellites back-to-front for layering
         points.sort(key=lambda p: p[2])
 
         # Build grid
         grid: list[list[str]] = [[" "] * self.width for _ in range(self.height)]
 
-        # Background stars
+        # Layer 1: background stars
         star_char = self._get_char("star")
         for (y, x), seed in self.stars.items():
             if 0 <= y < self.height and 0 <= x < self.width:
                 sc = self._color("90") if seed > 0.92 and not dim else self._color("2;90")
                 grid[y][x] = f"{sc}{star_char}{self.ANSI_RESET}"
 
-        # Place satellites
+        # Layer 2: persistent trail (dim │ — the orbital path memory)
         sat_char = self._get_char("sat")
-        spawn_char = self._get_char("spawn")
+        for (y, x), ring_idx in self._trail.items():
+            if 0 <= y < self.height and 0 <= x < self.width:
+                _, _, dim_c = self.PALETTE[ring_idx % len(self.PALETTE)]
+                color = self._color("2;90") if dim else self._color(dim_c)
+                grid[y][x] = f"{color}{sat_char}{self.ANSI_RESET}"
 
+        # Layer 3: active satellites (bright, overwrite trail at current positions)
         for sx, sy, z, ring_idx, age in points:
             if not (0 <= sx < self.width and 0 <= sy < self.height):
                 continue
-
-            # Occlusion: behind AND at the exact core cell → hidden by star
             if z < 0 and sx == core_x and sy == core_y:
                 continue
 
             bright_c, normal_c, dim_c = self.PALETTE[ring_idx % len(self.PALETTE)]
 
-            # Materializing: bright dot for first few frames, then solidifies to │
             if age < 10:
-                ch = spawn_char
+                # New satellite: bright pop, then settles
                 color = self._color(bright_c) if not dim else self._color(normal_c)
             elif z < 0:
-                # Behind: dimmed but visible
-                ch = sat_char
-                color = self._color(dim_c) if not dim else self._color("2;90")
-            else:
-                ch = sat_char
+                # Behind: visible but subdued (brighter than trail so it's distinct)
                 color = self._color(normal_c) if not dim else self._color(dim_c)
+            else:
+                # Front: full brightness
+                color = self._color(bright_c) if not dim else self._color(normal_c)
 
-            grid[sy][sx] = f"{color}{ch}{self.ANSI_RESET}"
+            grid[sy][sx] = f"{color}{sat_char}{self.ANSI_RESET}"
 
-        # Central star (always on top)
+        # Layer 4: central star (always on top)
         if 0 <= core_y < self.height and 0 <= core_x < self.width:
             cc = self._color("97;1") if not dim else self._color("37")
             grid[core_y][core_x] = f"{cc}{self._get_char('core')}{self.ANSI_RESET}"
