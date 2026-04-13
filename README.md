@@ -24,8 +24,10 @@ freio --size 31          # fixed grid size
 | Spacebar       | Cycle to next visualization     |
 | Left / Right   | Adjust slider 1 (shape)         |
 | Up / Down      | Adjust slider 2 (feel)          |
-| e              | Toggle enjoy mode (hide HUD)    |
-| q / Esc        | Quit                            |
+| f              | Toggle fullscreen HUD-free mode |
+| e              | Toggle enjoy/fullscreen mode    |
+| Esc            | Exit fullscreen and restore HUD |
+| q              | Quit                            |
 
 Every input maps to exactly one function — no modal selection needed. A brief hint overlay appears on launch and fades after a few seconds.
 

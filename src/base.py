@@ -23,6 +23,8 @@ INPUT_UP = 4
 INPUT_DOWN = 5
 INPUT_ENJOY = 8
 INPUT_SPACE = 9
+INPUT_FULLSCREEN = 10
+INPUT_ESCAPE = 11
 
 
 @dataclass
@@ -55,6 +57,7 @@ class BaseVisualizer(ABC):
         oneshot: bool = False,
     ):
         self.auto_size = size <= 0
+        self.hud_rows = HUD_ROWS
         if self.auto_size:
             self.width, self.height = self._terminal_fit_dims()
         else:
@@ -71,7 +74,7 @@ class BaseVisualizer(ABC):
     def _terminal_fit_dims(self) -> tuple[int, int]:
         try:
             ts = os.get_terminal_size()
-            return ts.columns, ts.lines - HUD_ROWS
+            return ts.columns, max(1, ts.lines - self.hud_rows)
         except OSError:
             return 80, 22
 
@@ -88,6 +91,19 @@ class BaseVisualizer(ABC):
     def _on_resize(self) -> None:
         """Override in subclasses to react to size changes."""
         pass
+
+    def set_hud_rows(self, rows: int) -> None:
+        rows = max(0, rows)
+        if rows == self.hud_rows:
+            return
+        self.hud_rows = rows
+        if not self.auto_size:
+            return
+        new_w, new_h = self._terminal_fit_dims()
+        if new_w != self.width or new_h != self.height:
+            self.width = new_w
+            self.height = new_h
+            self._on_resize()
 
     def clear_screen(self) -> str:
         return self.ANSI_HOME
@@ -173,6 +189,8 @@ class BaseVisualizer(ABC):
                 return INPUT_QUIT
             if ch in ("e", "E"):
                 return INPUT_ENJOY
+            if ch in ("f", "F"):
+                return INPUT_FULLSCREEN
             if ch == " ":
                 return INPUT_SPACE
             if ch == "\x1b":
@@ -192,7 +210,9 @@ class BaseVisualizer(ABC):
                     return INPUT_RIGHT
                 if buf == "[D":
                     return INPUT_LEFT
-                # Bare ESC or unknown sequence — ignore
+                if not buf:
+                    return INPUT_ESCAPE
+                # Unknown sequence — ignore
                 return INPUT_NONE
         except (OSError, IOError):
             return INPUT_NONE

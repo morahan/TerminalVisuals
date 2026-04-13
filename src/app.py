@@ -6,6 +6,7 @@ import traceback
 from src.base import (
     BaseVisualizer, INPUT_QUIT, INPUT_LEFT, INPUT_RIGHT,
     INPUT_UP, INPUT_DOWN, INPUT_ENJOY, INPUT_SPACE,
+    INPUT_FULLSCREEN, INPUT_ESCAPE, HUD_ROWS,
 )
 from src.waves import WaveVisualizer
 from src.galaxy import GalaxyVisualizer
@@ -65,7 +66,7 @@ class App:
             ZenVisualizer(**common, rake_width=rake_width, level=zen_level),
         ]
         self.index = MODE_NAMES.index(start_mode) if start_mode in MODE_NAMES else 0
-        self.enjoy_mode = False
+        self.fullscreen = False
         self.total_frames = 0  # tracks frames across mode switches for hint fade
 
     @property
@@ -82,6 +83,7 @@ class App:
             while True:
                 vis = self.current
                 vis._old_term_settings = self._term_settings
+                vis.set_hud_rows(0 if self.fullscreen else HUD_ROWS)
 
                 result = vis.run_loop(
                     on_frame=self._draw_hud,
@@ -117,14 +119,16 @@ class App:
             vis.adjust_slider(1, 1)
         elif event == INPUT_DOWN:
             vis.adjust_slider(1, -1)
-        elif event == INPUT_ENJOY:
-            self.enjoy_mode = not self.enjoy_mode
+        elif event in (INPUT_ENJOY, INPUT_FULLSCREEN):
+            self._set_fullscreen(not self.fullscreen)
+        elif event == INPUT_ESCAPE and self.fullscreen:
+            self._set_fullscreen(False)
         return True
 
     def _draw_hud(self) -> str:
         self.total_frames += 1
 
-        if self.enjoy_mode:
+        if self.fullscreen:
             return ""
 
         try:
@@ -175,7 +179,12 @@ class App:
             else:
                 hint_color = ""
             if hint_color:
-                hint_str = f"{hint_color}space next   \u2190\u2192 {vis.sliders[0].name.lower() if vis.sliders else ''}   \u2191\u2193 {vis.sliders[1].name.lower() if len(vis.sliders) > 1 else ''}   e enjoy   q quit\033[0m"
+                hint_str = (
+                    f"{hint_color}space next   "
+                    f"\u2190\u2192 {vis.sliders[0].name.lower() if vis.sliders else ''}   "
+                    f"\u2191\u2193 {vis.sliders[1].name.lower() if len(vis.sliders) > 1 else ''}   "
+                    f"f fullscreen   e enjoy   q quit\033[0m"
+                )
 
         # Layout: 3 lines at bottom (separator, sliders, mode)
         # Optional 4th line for hint
@@ -207,3 +216,11 @@ class App:
             out.append(f"\033[{y_hint};1H\033[2K\033[{y_hint};{pad_h}H{hint_str}")
 
         return "".join(out)
+
+    def _set_fullscreen(self, fullscreen: bool) -> None:
+        if self.fullscreen == fullscreen:
+            return
+        self.fullscreen = fullscreen
+        hud_rows = 0 if fullscreen else HUD_ROWS
+        for vis in self.visualizers:
+            vis.set_hud_rows(hud_rows)
