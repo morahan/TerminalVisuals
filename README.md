@@ -1,6 +1,6 @@
 # Freio
 
-Retro-futuristic terminal visualizer. Waves, galaxies, and a droid boot-sequence spiral.
+Retro-futuristic terminal visualizer. Waves, galaxies, zen gardens, and luminous ASCII city skylines.
 
 ## Install
 
@@ -14,6 +14,7 @@ pipx install -e .
 freio                    # auto-fits terminal, starts in waves mode
 freio --mode galaxy      # start in galaxy mode
 freio --mode spiral      # start in droid spiral mode
+freio --mode skyline     # start in the unfolding skyline tour
 freio --size 31          # fixed grid size
 ```
 
@@ -38,12 +39,13 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 | Waves   | Amplitude (1-6)    | Frequency (0.1-0.8)   |
 | Galaxy  | Arms (1-8)         | Tightness (0.1-1.0)   |
 | Spiral  | Trail (1-10)       | Growth (0.1-0.6)      |
+| Skyline | City (Auto-Dubai)  | Glow (1-5)            |
 
 ## Options
 
 | Flag           | Default | Description                          |
 |----------------|---------|--------------------------------------|
-| `--mode`       | waves   | Starting mode: `waves`, `galaxy`, `spiral` |
+| `--mode`       | waves   | Starting mode: `waves`, `galaxy`, `spiral`, `dyson`, `aurora`, `ember`, `ripple`, `zen`, `skyline` |
 | `--size`       | auto    | Grid size (0 = fit to terminal)      |
 | `--speed`      | 5       | Animation speed (higher = faster)    |
 | `--brightness` | 100     | Brightness percentage                |
@@ -55,6 +57,8 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 | `--no-twinkle` | off     | Disable star twinkling               |
 | `--arm-gap`    | 2       | Space between spiral arms            |
 | `--trail`      | 4       | Glow trail length (spiral mode)      |
+| `--skyline-city` | auto  | Skyline city: `auto`, `newyork`, `paris`, `london`, `tokyo`, `sydney`, `dubai` |
+| `--skyline-glow` | 3     | Window, scanline, and reflection glow |
 
 ## Requirements
 
