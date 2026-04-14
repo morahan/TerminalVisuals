@@ -194,4 +194,4 @@ class DysonVisualizer(BaseVisualizer):
             grid[core_y][core_x] = f"{cc}{self._get_char('core')}{self.ANSI_RESET}"
 
         lines = ["".join(row) for row in grid]
-        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
+        return "\n".join(lines) + f"\033[{self.height + 1};1H"
