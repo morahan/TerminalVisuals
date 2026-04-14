@@ -16,9 +16,10 @@ from src.aurora import AuroraVisualizer
 from src.ember import EmberVisualizer
 from src.ripple import RippleVisualizer
 from src.zen import ZenVisualizer
+from src.skyline import SkylineVisualizer
 
 
-MODE_NAMES = ["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple", "zen"]
+MODE_NAMES = ["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple", "zen", "skyline"]
 
 # Onboarding hint fades after this many frames
 HINT_FRAMES = 240
@@ -51,6 +52,8 @@ class App:
         wavelength: float = 4.0,
         rake_width: int = 3,
         zen_level: int = 4,
+        skyline_city: int = 0,
+        skyline_glow: int = 3,
     ):
         common = dict(size=size, speed=speed, brightness=brightness,
                       ascii_mode=ascii_mode, oneshot=oneshot)
@@ -64,6 +67,7 @@ class App:
             EmberVisualizer(**common, density=density, warmth=warmth),
             RippleVisualizer(**common, sources=sources, wavelength=wavelength),
             ZenVisualizer(**common, rake_width=rake_width, level=zen_level),
+            SkylineVisualizer(**common, city=skyline_city, glow=skyline_glow),
         ]
         self.index = MODE_NAMES.index(start_mode) if start_mode in MODE_NAMES else 0
         self.fullscreen = False
@@ -154,7 +158,7 @@ class App:
             bar_len = 10
             filled = int(ratio * bar_len)
             bar = bar_full * filled + bar_empty * (bar_len - filled)
-            val_str = str(int(val)) if s.fmt == "d" else f"{val:{s.fmt}}"
+            val_str = s.format_value(val)
             axis = arrows[i] if i < len(arrows) else ""
             slider_parts.append(f"\033[96m{axis} {s.name}\033[0m [{bar}] {val_str}")
 
