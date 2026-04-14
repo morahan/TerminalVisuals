@@ -4,7 +4,7 @@ from src.base import BaseVisualizer, Slider
 
 
 class ZenVisualizer(BaseVisualizer):
-    """Zen sand garden -- a rake traces a Hilbert curve, leaving parallel grooves."""
+    """Zen sand garden -- a rake glides through the sand, leaving settling grooves."""
 
     sliders = [
         Slider(name="Rake", attr="rake_width", min_val=1, max_val=5, step=1, fmt="d"),
@@ -15,37 +15,18 @@ class ZenVisualizer(BaseVisualizer):
         "sand": "\u00b7",       # ·
         "horiz": "\u2500",      # ─
         "vert": "\u2502",       # │
-        "corner_dr": "\u256d",  # ╭
-        "corner_dl": "\u256e",  # ╮
-        "corner_ur": "\u2570",  # ╰
-        "corner_ul": "\u256f",  # ╯
         "head": "\u25e6",       # ◦
         "sand_ascii": ".",
         "horiz_ascii": "-",
         "vert_ascii": "|",
-        "corner_dr_ascii": "+",
-        "corner_dl_ascii": "+",
-        "corner_ur_ascii": "+",
-        "corner_ul_ascii": "+",
         "head_ascii": "o",
-    }
-
-    # (incoming_dx, incoming_dy, outgoing_dx, outgoing_dy) -> corner char name
-    CORNERS = {
-        (1, 0, 0, 1): "corner_dl",    # right -> down  = ╮
-        (1, 0, 0, -1): "corner_ul",   # right -> up    = ╯
-        (-1, 0, 0, 1): "corner_dr",   # left  -> down  = ╭
-        (-1, 0, 0, -1): "corner_ur",  # left  -> up    = ╰
-        (0, 1, 1, 0): "corner_ur",    # down  -> right = ╰
-        (0, 1, -1, 0): "corner_ul",   # down  -> left  = ╯
-        (0, -1, 1, 0): "corner_dr",   # up    -> right = ╭
-        (0, -1, -1, 0): "corner_dl",  # up    -> left  = ╮
     }
 
     # Pre-computed age color codes
     _AGE_COLORS = ["97;1", "97", "93", "33", "2;33", "90"]
     _AGE_COLORS_DIM = ["97", "97", "93", "33", "2;33", "90"]
     _AGE_THRESHOLDS = [0.03, 0.10, 0.25, 0.50, 0.75]
+    _SAMPLE_DENSITY = 2.4
 
     def __init__(
         self,
@@ -64,10 +45,8 @@ class ZenVisualizer(BaseVisualizer):
         self._path: list[tuple[int, int]] = []
         self._directions: list[tuple[int, int]] = []
         self._curve_size = 0
-        # Cached segment drawing data
-        self._seg_cells: list[list[tuple[int, int, str]]] = []
-        self._seg_corners: list[tuple[int, int, str] | None] = []
-        self._head_coords: list[tuple[int, int] | None] = []
+        self._sample_footprints: list[list[tuple[int, int, str]]] = []
+        self._sample_heads: list[tuple[int, int, str] | None] = []
         self._sand_rows: list[str] = []
         self._sand_colors: list[str] = []
         self._cache_key: tuple = ()
@@ -110,8 +89,43 @@ class ZenVisualizer(BaseVisualizer):
         self._built_level = self.level
         self._cache_key = ()  # invalidate segment cache
 
-    def _build_segments(self) -> None:
-        """Pre-compute terminal coordinates for each segment (cached on resize/rake change)."""
+    def _sample_footprint(
+        self,
+        center_x: float,
+        center_y: float,
+        dx: float,
+        dy: float,
+        w: int,
+        h: int,
+    ) -> list[tuple[int, int, str]]:
+        half = self.rake_width // 2
+        base_x = int(round(center_x))
+        base_y = int(round(center_y))
+        seen: set[tuple[int, int]] = set()
+        cells: list[tuple[int, int, str]] = []
+
+        is_horiz = abs(dx) >= abs(dy)
+        ch = self._get_char("horiz" if is_horiz else "vert")
+
+        if is_horiz:
+            for offset in range(-half, half + 1):
+                x = base_x
+                y = base_y + offset
+                if 0 <= x < w and 0 <= y < h and (x, y) not in seen:
+                    cells.append((x, y, ch))
+                    seen.add((x, y))
+        else:
+            for offset in range(-half, half + 1):
+                x = base_x + offset
+                y = base_y
+                if 0 <= x < w and 0 <= y < h and (x, y) not in seen:
+                    cells.append((x, y, ch))
+                    seen.add((x, y))
+
+        return cells
+
+    def _build_samples(self) -> None:
+        """Pre-compute terminal rake samples for a smooth pass through the garden."""
         w, h = self.width, self.height
         n = self._curve_size
         total = len(self._path)
@@ -125,79 +139,53 @@ class ZenVisualizer(BaseVisualizer):
         sx = usable_w / max(1, n - 1)
         sy = usable_h / max(1, n - 1)
 
-        half = self.rake_width // 2
-        horiz_ch = self._get_char("horiz")
-        vert_ch = self._get_char("vert")
+        control_points = [
+            (ox + gx * sx, oy + gy * sy)
+            for gx, gy in self._path
+        ]
 
-        self._seg_cells = []
-        self._seg_corners = []
+        self._sample_footprints = []
+        self._sample_heads = []
+        head_ch = self._get_char("head")
 
         for i in range(total - 1):
-            gx, gy = self._path[i]
-            ngx, ngy = self._path[i + 1]
-            dx, dy = self._directions[i]
+            x1, y1 = control_points[i]
+            x2, y2 = control_points[i + 1]
+            dx = x2 - x1
+            dy = y2 - y1
 
-            tx1 = ox + int(gx * sx)
-            ty1 = oy + int(gy * sy)
-            tx2 = ox + int(ngx * sx)
-            ty2 = oy + int(ngy * sy)
+            steps = max(1, int(math.ceil(max(abs(dx), abs(dy)) * self._SAMPLE_DENSITY)))
+            start = 0 if i == 0 else 1
 
-            cells: list[tuple[int, int, str]] = []
-            is_horiz = dx != 0
-            ch = horiz_ch if is_horiz else vert_ch
+            for step in range(start, steps + 1):
+                u = step / steps
+                cx = x1 + dx * u
+                cy = y1 + dy * u
+                footprint = self._sample_footprint(cx, cy, dx, dy, w, h)
+                if not footprint:
+                    continue
 
-            if is_horiz:
-                step = 1 if tx2 >= tx1 else -1
-                for x in range(tx1, tx2 + step, step):
-                    for k in range(-half, half + 1):
-                        y = ty1 + k
-                        if 0 <= x < w and 0 <= y < h:
-                            cells.append((x, y, ch))
-            else:
-                step = 1 if ty2 >= ty1 else -1
-                for y in range(ty1, ty2 + step, step):
-                    for k in range(-half, half + 1):
-                        x = tx1 + k
-                        if 0 <= x < w and 0 <= y < h:
-                            cells.append((x, y, ch))
-
-            self._seg_cells.append(cells)
-
-            # Corner at direction change (center tine)
-            corner = None
-            if i > 0:
-                pdx, pdy = self._directions[i - 1]
-                if (pdx, pdy) != (dx, dy):
-                    cname = self.CORNERS.get((pdx, pdy, dx, dy))
-                    if cname and 0 <= tx1 < w and 0 <= ty1 < h:
-                        corner = (tx1, ty1, self._get_char(cname))
-            self._seg_corners.append(corner)
-
-        # Head positions
-        self._head_coords = []
-        head_ch = self._get_char("head")
-        for i in range(total):
-            hgx, hgy = self._path[i]
-            htx = ox + int(hgx * sx)
-            hty = oy + int(hgy * sy)
-            if 0 <= htx < w and 0 <= hty < h:
-                self._head_coords.append((htx, hty, head_ch))
-            else:
-                self._head_coords.append(None)
+                self._sample_footprints.append(footprint)
+                hx = int(round(cx))
+                hy = int(round(cy))
+                if 0 <= hx < w and 0 <= hy < h:
+                    self._sample_heads.append((hx, hy, head_ch))
+                else:
+                    self._sample_heads.append(None)
 
         sand_dot = self._get_char("sand")
         self._sand_rows = []
         self._sand_colors = []
         for y in range(h):
             row_ratio = y / max(1, h - 1)
-            band = 0.5 + 0.5 * math.sin(row_ratio * math.pi * 3.0 - 0.4)
-            freq = 0.085 + 0.025 * math.cos(row_ratio * math.pi * 2.0)
-            threshold = 0.968 + 0.012 * (1.0 - band)
+            band = 0.5 + 0.5 * math.sin(row_ratio * math.pi * 2.6 - 0.35)
+            freq = 0.070 + 0.018 * math.cos(row_ratio * math.pi * 1.7)
+            threshold = 0.974 + 0.008 * (1.0 - band)
             sand_chars = []
             for x in range(w):
-                ripple = 0.5 + 0.5 * math.sin(x * freq + y * 0.55)
-                drift = 0.5 + 0.5 * math.sin(x * (freq * 0.43) - y * 0.28)
-                if ripple * 0.72 + drift * 0.28 > threshold:
+                ripple = 0.5 + 0.5 * math.sin(x * freq + y * 0.42)
+                drift = 0.5 + 0.5 * math.sin(x * (freq * 0.36) - y * 0.24)
+                if ripple * 0.76 + drift * 0.24 > threshold:
                     sand_chars.append(sand_dot)
                 else:
                     sand_chars.append(" ")
@@ -224,68 +212,69 @@ class ZenVisualizer(BaseVisualizer):
                 return codes[j]
         return codes[-1]
 
+    def _render_sand(self) -> str:
+        reset = self.ANSI_RESET
+        lines = []
+        for y, row in enumerate(self._sand_rows):
+            lines.append(f"{self._sand_colors[y]}{row}{reset}")
+        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
+
     def render_frame(self) -> str:
         if self._built_level != self.level:
             self._build_path()
 
         w, h = self.width, self.height
-        total = len(self._path)
-
-        # Rebuild segment cache if dimensions/settings changed
         key = (w, h, self.rake_width, self.level, self.ascii_mode, self.brightness)
         if self._cache_key != key:
-            self._build_segments()
+            self._build_samples()
 
-        # Cycle: reveal -> contemplate -> dissolve -> rest
-        rate = max(0.35, total / 280.0)
-        t_reveal = total / rate
-        t_pause = 72.0
-        t_fade = 56.0
-        t_rest = 18.0
-        cycle = t_reveal + t_pause + t_fade + t_rest
+        sample_total = len(self._sample_footprints)
+        if sample_total == 0:
+            return self._render_sand()
+
+        sweep_rate = max(5.0, sample_total / 72.0)
+        t_sweep = sample_total / sweep_rate
+        t_hold = 12.0
+        t_fade = 26.0
+        cycle = t_sweep + t_hold + t_fade
 
         t = self.frame % cycle
-        if t < t_reveal:
-            revealed = min(total, int(t * rate))
+        if t < t_sweep:
+            head_idx = min(sample_total - 1, int(t * sweep_rate))
+            carved = head_idx + 1
+            settle_bias = 0.02
             fade = 0.0
-        elif t < t_reveal + t_pause:
-            revealed = total
+            show_head = True
+        elif t < t_sweep + t_hold:
+            head_idx = sample_total - 1
+            carved = sample_total
+            settle_bias = 0.28
             fade = 0.0
-        elif t < t_reveal + t_pause + t_fade:
-            revealed = total
-            fade = (t - t_reveal - t_pause) / t_fade
+            show_head = False
         else:
-            revealed = 0
-            fade = 1.0
+            head_idx = sample_total - 1
+            carved = sample_total
+            settle_bias = 0.46
+            fade = (t - t_sweep - t_hold) / t_fade
+            show_head = False
 
-        # Grid: None = sand, (char, color_str) = groove
-        grid: list[list] = [[None] * w for _ in range(h)]
+        grid: list[list[tuple[str, str] | None]] = [[None] * w for _ in range(h)]
+        trail_span = max(22.0, sample_total * 0.24)
+        inv_trail = 1.0 / trail_span
 
-        seg_count = min(revealed, total - 1)
-        inv_age_denom = 1.0 / max(1, total * 0.45)
-        seg_cells = self._seg_cells
-        seg_corners = self._seg_corners
-
-        for i in range(seg_count):
-            age = (seg_count - i) * inv_age_denom + fade
+        for i in range(carved):
+            age = (carved - 1 - i) * inv_trail * 0.78 + settle_bias + fade * 0.92
             color = f"\033[{self._age_color_code(age)}m"
-
-            for x, y, ch in seg_cells[i]:
+            for x, y, ch in self._sample_footprints[i]:
                 grid[y][x] = (ch, color)
 
-            corner = seg_corners[i]
-            if corner is not None:
-                cx, cy, cch = corner
-                grid[cy][cx] = (cch, color)
-
-        # Rake head
-        if 0 < revealed <= total and fade == 0.0:
-            hc = self._head_coords[revealed - 1]
+        if show_head:
+            hc = self._sample_heads[head_idx]
             if hc is not None:
                 hx, hy, hch = hc
-                grid[hy][hx] = (hch, "\033[97m")
+                head_color = "\033[97m" if self.brightness < 50 else "\033[97;1m"
+                grid[hy][hx] = (hch, head_color)
 
-        # Build output with color batching
         reset = self.ANSI_RESET
 
         lines = []
