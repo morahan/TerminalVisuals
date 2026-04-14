@@ -70,22 +70,34 @@ class BaseVisualizer(ABC):
         self.frame = 0.0
         self.running = True
         self._old_term_settings: Optional[list] = None
+        self._last_term_size = self._get_terminal_size()
+        self._needs_full_clear = True
 
-    def _terminal_fit_dims(self) -> tuple[int, int]:
+    def _get_terminal_size(self) -> tuple[int, int]:
         try:
             ts = os.get_terminal_size()
-            return ts.columns, max(1, ts.lines - self.hud_rows)
+            return ts.columns, ts.lines
         except OSError:
-            return 80, 22
+            return 80, 24
+
+    def _terminal_fit_dims(self) -> tuple[int, int]:
+        cols, lines = self._get_terminal_size()
+        return cols, max(1, lines - self.hud_rows)
 
     def _update_size(self) -> None:
         """Re-fit size to current terminal dimensions. Called each frame when auto_size is on."""
+        term_size = self._get_terminal_size()
+        if term_size != self._last_term_size:
+            self._last_term_size = term_size
+            self._needs_full_clear = True
         if not self.auto_size:
             return
-        new_w, new_h = self._terminal_fit_dims()
+        new_w = term_size[0]
+        new_h = max(1, term_size[1] - self.hud_rows)
         if new_w != self.width or new_h != self.height:
             self.width = new_w
             self.height = new_h
+            self._needs_full_clear = True
             self._on_resize()
 
     def _on_resize(self) -> None:
@@ -97,6 +109,7 @@ class BaseVisualizer(ABC):
         if rows == self.hud_rows:
             return
         self.hud_rows = rows
+        self._needs_full_clear = True
         if not self.auto_size:
             return
         new_w, new_h = self._terminal_fit_dims()
@@ -106,6 +119,9 @@ class BaseVisualizer(ABC):
             self._on_resize()
 
     def clear_screen(self) -> str:
+        if self._needs_full_clear:
+            self._needs_full_clear = False
+            return self.ANSI_CLEAR + self.ANSI_HOME
         return self.ANSI_HOME
 
     @abstractmethod
