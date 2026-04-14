@@ -125,4 +125,4 @@ class GalaxyVisualizer(BaseVisualizer):
 
             lines.append(line)
 
-        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
+        return "\n".join(lines) + f"\033[{self.height + 1};1H"
