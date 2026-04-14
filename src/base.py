@@ -35,6 +35,14 @@ class Slider:
     max_val: float
     step: float
     fmt: str = ".1f"
+    display: Optional[Callable[[float], str]] = None
+
+    def format_value(self, value: float) -> str:
+        if self.display is not None:
+            return self.display(value)
+        if self.fmt == "d":
+            return str(int(value))
+        return f"{value:{self.fmt}}"
 
 
 class BaseVisualizer(ABC):
