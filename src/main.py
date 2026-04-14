@@ -7,7 +7,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Terminal Visualizer")
     parser.add_argument(
         "--mode",
-        choices=["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple", "zen"],
+        choices=["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple", "zen", "skyline"],
         default="waves",
         help="Starting visualization mode (default: waves)",
     )
@@ -88,11 +88,31 @@ def parse_args():
         "--zen-level", type=int, default=4, help="Hilbert curve detail level (default: 4)"
     )
 
+    skyline_group = parser.add_argument_group("Skyline Options")
+    skyline_group.add_argument(
+        "--skyline-city",
+        choices=["auto", "newyork", "paris", "london", "tokyo", "sydney", "dubai"],
+        default="auto",
+        help="Pinned skyline city or auto tour (default: auto)",
+    )
+    skyline_group.add_argument(
+        "--skyline-glow", type=int, default=3, help="Window and reflection glow (default: 3)"
+    )
+
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    skyline_city_map = {
+        "auto": 0,
+        "newyork": 1,
+        "paris": 2,
+        "london": 3,
+        "tokyo": 4,
+        "sydney": 5,
+        "dubai": 6,
+    }
 
     app = App(
         start_mode=args.mode,
@@ -117,6 +137,8 @@ def main():
         wavelength=args.wavelength,
         rake_width=args.rake_width,
         zen_level=args.zen_level,
+        skyline_city=skyline_city_map[args.skyline_city],
+        skyline_glow=args.skyline_glow,
     )
     app.run()
 
