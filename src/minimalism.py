@@ -176,4 +176,4 @@ class MinimalismVisualizer(BaseVisualizer):
                     row.append(" ")
             lines.append("".join(row))
 
-        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
+        return "\n".join(lines) + f"\033[{self.height + 1};1H"
