@@ -121,7 +121,7 @@ class SpiralVisualizer(BaseVisualizer):
         lines = []
         for row in grid:
             lines.append("".join(row))
-        return "\n".join(lines) + f"\n\033[{self.height + 1};1H"
+        return "\n".join(lines) + f"\033[{self.height + 1};1H"
 
     def _style_point(self, radius: float, age: float) -> tuple[str, str]:
         ring_idx = int(radius / max(1, self.arm_gap))
