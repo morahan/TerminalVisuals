@@ -161,4 +161,4 @@ class RippleVisualizer(BaseVisualizer):
 
             lines.append("".join(row))
 
-        return "\n".join(lines) + f"\n\033[{h + 1};1H"
+        return "\n".join(lines) + f"\033[{h + 1};1H"
