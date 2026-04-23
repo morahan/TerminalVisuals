@@ -14,7 +14,7 @@ pipx install -e .
 freio                    # auto-fits terminal, starts in waves mode
 freio --mode galaxy      # start in galaxy mode
 freio --mode spiral      # start in droid spiral mode
-freio --mode skyline     # start in the unfolding skyline tour
+freio --mode skyline     # start in the cinematic shuffled skyline tour
 freio --size 31          # fixed grid size
 ```
 
@@ -37,9 +37,9 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 | Mode    | Slider 1           | Slider 2              |
 |---------|--------------------|-----------------------|
 | Waves   | Amplitude (1-6)    | Frequency (0.1-0.8)   |
-| Galaxy  | Arms (1-8)         | Tightness (0.1-1.0)   |
+| Galaxy  | Depth (0.10-0.50)  | Drift (0.5-3.0)       |
 | Spiral  | Trail (1-10)       | Growth (0.1-0.6)      |
-| Skyline | City (Auto-Dubai)  | Glow (1-5)            |
+| Skyline | City (Auto-Scene)  | Glow (1-5)            |
 
 ## Options
 
@@ -53,12 +53,12 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 | `--oneshot`    | off     | Run once then exit                   |
 | `--wave-count` | 3       | Number of wave layers (waves mode)   |
 | `--no-foam`    | off     | Disable foam highlights              |
-| `--arms`       | 2       | Spiral arms (galaxy mode)            |
-| `--no-twinkle` | off     | Disable star twinkling               |
-| `--arm-gap`    | 2       | Space between spiral arms            |
+| `--depth`      | 0.22    | Galaxy halo tilt depth               |
+| `--drift`      | 1.5     | Galaxy precession drift intensity    |
+| `--arm-gap`    | 2       | Spiral spacing                       |
 | `--trail`      | 4       | Glow trail length (spiral mode)      |
-| `--skyline-city` | auto  | Skyline city: `auto`, `newyork`, `paris`, `london`, `tokyo`, `sydney`, `dubai` |
-| `--skyline-glow` | 3     | Window, scanline, and reflection glow |
+| `--skyline-city` | auto  | Skyline city: `auto` or a discovered skyline scene (`newyork`, `paris`, `london`, `tokyo`, `sydney`, `dubai`, plus future scene methods) |
+| `--skyline-glow` | 3     | City accent glow plus transition intensity |
 
 ## Requirements
 
