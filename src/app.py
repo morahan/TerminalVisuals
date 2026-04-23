@@ -1,5 +1,6 @@
 import os
 import re
+import signal
 import sys
 import traceback
 
@@ -83,6 +84,9 @@ class App:
         first._hide_cursor()
         first._set_raw_mode()
         self._term_settings = first._old_term_settings
+        self._cursor_hidden = True
+        self._orig_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        self._orig_sigterm = signal.signal(signal.SIGTERM, signal.SIG_IGN)
         try:
             while True:
                 vis = self.current
@@ -106,15 +110,22 @@ class App:
             with open("/tmp/freio_crash.log", "w") as f:
                 traceback.print_exc(file=f)
         finally:
-            first._old_term_settings = self._term_settings
-            first._restore_mode()
-            first._show_cursor()
-            first._exit_alt_screen()
-            try:
-                sys.stdout.write(first.ANSI_RESET)
-                sys.stdout.flush()
-            except (BrokenPipeError, OSError):
-                pass
+            self._restore_and_show_cursor()
+
+    def _restore_and_show_cursor(self) -> None:
+        try:
+            sys.stdout.write(self.current.ANSI_RESET)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
+        for vis in self.visualizers:
+            vis._restore_mode()
+        if self._cursor_hidden:
+            self._cursor_hidden = False
+            self.current._show_cursor()
+        self.current._exit_alt_screen()
+        signal.signal(signal.SIGINT, self._orig_sigint)
+        signal.signal(signal.SIGTERM, self._orig_sigterm)
 
     def _handle_event(self, event: int) -> bool:
         vis = self.current
