@@ -6,7 +6,7 @@ import traceback
 from src.base import (
     BaseVisualizer, INPUT_QUIT, INPUT_LEFT, INPUT_RIGHT,
     INPUT_UP, INPUT_DOWN, INPUT_ENJOY, INPUT_SPACE,
-    INPUT_FULLSCREEN, INPUT_ESCAPE, HUD_ROWS,
+    INPUT_FULLSCREEN, INPUT_ESCAPE, INPUT_REVERSE, HUD_ROWS,
 )
 from src.waves import WaveVisualizer
 from src.galaxy import GalaxyVisualizer
@@ -38,8 +38,8 @@ class App:
         oneshot: bool = False,
         wave_count: int = 3,
         foam: bool = True,
-        arms: int = 2,
-        twinkle: bool = True,
+        depth: float = 0.22,
+        drift: float = 1.5,
         arm_gap: int = 2,
         trail: int = 4,
         spread: float = 0.30,
@@ -60,7 +60,7 @@ class App:
 
         self.visualizers: list[BaseVisualizer] = [
             WaveVisualizer(**common, wave_count=wave_count, foam=foam),
-            GalaxyVisualizer(**common, arms=arms, twinkle=twinkle, arm_gap=arm_gap),
+            GalaxyVisualizer(**common, drift=drift),
             SpiralVisualizer(**common, arm_gap=arm_gap, trail=trail),
             DysonVisualizer(**common, spread=spread, orbit_speed=orbit_speed),
             AuroraVisualizer(**common, curtains=curtains, shimmer=shimmer),
@@ -110,8 +110,11 @@ class App:
             first._restore_mode()
             first._show_cursor()
             first._exit_alt_screen()
-            sys.stdout.write(first.ANSI_RESET)
-            sys.stdout.flush()
+            try:
+                sys.stdout.write(first.ANSI_RESET)
+                sys.stdout.flush()
+            except (BrokenPipeError, OSError):
+                pass
 
     def _handle_event(self, event: int) -> bool:
         vis = self.current
@@ -127,6 +130,8 @@ class App:
             self._set_fullscreen(not self.fullscreen)
         elif event == INPUT_ESCAPE and self.fullscreen:
             self._set_fullscreen(False)
+        elif event == INPUT_REVERSE:
+            vis.reverse()
         return True
 
     def _draw_hud(self) -> str:
@@ -140,6 +145,11 @@ class App:
             rows = os.get_terminal_size().lines
         except OSError:
             cols, rows = 80, 24
+        cols = max(1, cols)
+        rows = max(1, rows)
+
+        if rows <= HUD_ROWS or cols < 12:
+            return ""
 
         vis = self.current
         ascii_mode = vis.ascii_mode
@@ -187,14 +197,14 @@ class App:
                     f"{hint_color}space next   "
                     f"\u2190\u2192 {vis.sliders[0].name.lower() if vis.sliders else ''}   "
                     f"\u2191\u2193 {vis.sliders[1].name.lower() if len(vis.sliders) > 1 else ''}   "
-                    f"f fullscreen   e enjoy   q quit\033[0m"
+                    f"f fullscreen   e enjoy   r reverse   q quit\033[0m"
                 )
 
         # Layout: 3 lines at bottom (separator, sliders, mode)
         # Optional 4th line for hint
         slider_plain_len = len(_ANSI_RE.sub("", hud_sliders))
-        pad_s = max(0, (cols - slider_plain_len) // 2)
-        pad_m = max(0, (cols - len(mode_str)) // 2)
+        pad_s = max(1, (cols - slider_plain_len) // 2 + 1)
+        pad_m = max(1, (cols - len(mode_str)) // 2 + 1)
 
         y_sep = rows - 3
         y_slider = rows - 2
@@ -215,9 +225,10 @@ class App:
         # Hint overlay (centered, above separator)
         if hint_str:
             hint_plain_len = len(_ANSI_RE.sub("", hint_str))
-            pad_h = max(0, (cols - hint_plain_len) // 2)
+            pad_h = max(1, (cols - hint_plain_len) // 2 + 1)
             y_hint = y_sep - 1
-            out.append(f"\033[{y_hint};1H\033[2K\033[{y_hint};{pad_h}H{hint_str}")
+            if y_hint >= 1:
+                out.append(f"\033[{y_hint};1H\033[2K\033[{y_hint};{pad_h}H{hint_str}")
 
         return "".join(out)
 

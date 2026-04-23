@@ -25,6 +25,7 @@ INPUT_ENJOY = 8
 INPUT_SPACE = 9
 INPUT_FULLSCREEN = 10
 INPUT_ESCAPE = 11
+INPUT_REVERSE = 12
 
 
 @dataclass
@@ -77,6 +78,7 @@ class BaseVisualizer(ABC):
         self.oneshot = oneshot
         self.frame = 0.0
         self.running = True
+        self.reversed = False
         self._old_term_settings: Optional[list] = None
         self._last_term_size = self._get_terminal_size()
         self._needs_full_clear = True
@@ -84,7 +86,7 @@ class BaseVisualizer(ABC):
     def _get_terminal_size(self) -> tuple[int, int]:
         try:
             ts = os.get_terminal_size()
-            return ts.columns, ts.lines
+            return max(1, ts.columns), max(1, ts.lines)
         except OSError:
             return 80, 24
 
@@ -100,7 +102,7 @@ class BaseVisualizer(ABC):
             self._needs_full_clear = True
         if not self.auto_size:
             return
-        new_w = term_size[0]
+        new_w = max(1, term_size[0])
         new_h = max(1, term_size[1] - self.hud_rows)
         if new_w != self.width or new_h != self.height:
             self.width = new_w
@@ -139,6 +141,9 @@ class BaseVisualizer(ABC):
     def reset(self) -> None:
         self.frame = 0.0
         self.running = True
+
+    def reverse(self) -> None:
+        self.reversed = not self.reversed
 
     def run(self) -> None:
         self._enter_alt_screen()
@@ -179,8 +184,12 @@ class BaseVisualizer(ABC):
             if on_frame:
                 output += on_frame()
 
-            sys.stdout.buffer.write(output.encode())
-            sys.stdout.buffer.flush()
+            try:
+                sys.stdout.buffer.write(output.encode())
+                sys.stdout.buffer.flush()
+            except (BrokenPipeError, OSError):
+                self.running = False
+                return INPUT_QUIT
 
             if self.oneshot:
                 break
@@ -215,6 +224,8 @@ class BaseVisualizer(ABC):
                 return INPUT_ENJOY
             if ch in ("f", "F"):
                 return INPUT_FULLSCREEN
+            if ch in ("r", "R"):
+                return INPUT_REVERSE
             if ch == " ":
                 return INPUT_SPACE
             if ch == "\x1b":
@@ -255,24 +266,39 @@ class BaseVisualizer(ABC):
             self._old_term_settings = None
 
     def _enter_alt_screen(self) -> None:
-        sys.stdout.write(self.ANSI_ALT_SCREEN_ON)
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(self.ANSI_ALT_SCREEN_ON)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
 
     def _exit_alt_screen(self) -> None:
-        sys.stdout.write(self.ANSI_ALT_SCREEN_OFF)
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(self.ANSI_ALT_SCREEN_OFF)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
 
     def _hide_cursor(self) -> None:
-        sys.stdout.write(self.ANSI_HIDE_CURSOR)
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(self.ANSI_HIDE_CURSOR)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
 
     def _show_cursor(self) -> None:
-        sys.stdout.write(self.ANSI_SHOW_CURSOR)
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(self.ANSI_SHOW_CURSOR)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
 
     def _cleanup(self) -> None:
         self._restore_mode()
         self._show_cursor()
         self._exit_alt_screen()
-        sys.stdout.write(self.ANSI_RESET)
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(self.ANSI_RESET)
+            sys.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
