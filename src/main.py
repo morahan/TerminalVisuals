@@ -1,9 +1,11 @@
 import argparse
 
 from src.app import App
+from src.skyline import SkylineVisualizer
 
 
 def parse_args():
+    skyline_city_choices = SkylineVisualizer.city_choices()
     parser = argparse.ArgumentParser(description="Terminal Visualizer")
     parser.add_argument(
         "--mode",
@@ -34,16 +36,16 @@ def parse_args():
 
     galaxy_group = parser.add_argument_group("Galaxy Options")
     galaxy_group.add_argument(
-        "--arms", type=int, default=2, help="Number of spiral arms (default: 2)"
+        "--depth", type=float, default=0.22, help="Halo tilt depth (default: 0.22)"
     )
     galaxy_group.add_argument(
-        "--no-twinkle", action="store_true", help="Disable star twinkling"
-    )
-    galaxy_group.add_argument(
-        "--arm-gap", type=int, default=2, help="Space between spiral arms (default: 2)"
+        "--drift", type=float, default=1.5, help="Precession drift intensity (default: 1.5)"
     )
 
     spiral_group = parser.add_argument_group("Spiral Options")
+    spiral_group.add_argument(
+        "--arm-gap", type=int, default=2, help="Spiral spacing (default: 2)"
+    )
     spiral_group.add_argument(
         "--trail", type=int, default=4, help="Glow trail length (default: 4)"
     )
@@ -91,7 +93,7 @@ def parse_args():
     skyline_group = parser.add_argument_group("Skyline Options")
     skyline_group.add_argument(
         "--skyline-city",
-        choices=["auto", "newyork", "paris", "london", "tokyo", "sydney", "dubai"],
+        choices=skyline_city_choices,
         default="auto",
         help="Pinned skyline city or auto tour (default: auto)",
     )
@@ -104,15 +106,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    skyline_city_map = {
-        "auto": 0,
-        "newyork": 1,
-        "paris": 2,
-        "london": 3,
-        "tokyo": 4,
-        "sydney": 5,
-        "dubai": 6,
-    }
+    skyline_city_map = SkylineVisualizer.city_choice_map()
 
     app = App(
         start_mode=args.mode,
@@ -123,8 +117,8 @@ def main():
         oneshot=args.oneshot,
         wave_count=args.wave_count,
         foam=not args.no_foam,
-        arms=args.arms,
-        twinkle=not args.no_twinkle,
+        depth=args.depth,
+        drift=args.drift,
         arm_gap=args.arm_gap,
         trail=args.trail,
         spread=args.spread,
