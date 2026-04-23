@@ -110,6 +110,8 @@ class DysonVisualizer(BaseVisualizer):
         max_sats = self.MAX_RINGS * self.SATS_PER_RING
         total_spawned = int(min(self.frame // self.SPAWN_INTERVAL + 1, max_sats))
 
+        direction = -1 if self.reversed else 1
+
         cam_a = 0.005 * math.sin(self.frame * 0.009)
         cam_b = 0.003 * math.sin(self.frame * 0.006)
 
@@ -132,7 +134,7 @@ class DysonVisualizer(BaseVisualizer):
 
             for s in range(ring_count):
                 base_angle = s * 2 * math.pi / self.SATS_PER_RING
-                theta = base_angle + self.frame * 0.02 * self.orbit_speed * speed_mult
+                theta = base_angle + self.frame * 0.02 * self.orbit_speed * speed_mult * direction
 
                 sx, sy, z = self._project(theta, alpha, beta, R, cx, cy)
                 spawn_frame = (spawned + s) * self.SPAWN_INTERVAL

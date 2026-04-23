@@ -85,13 +85,14 @@ class AuroraVisualizer(BaseVisualizer):
         n = int(self.curtains)
 
         # Pre-compute curtain center x-positions for this frame
+        direction = -1 if self.reversed else 1
         curtain_xs = []
         for i in range(n):
             base_x = (i + 1) * w / (n + 1)
             sway = (
-                self.shimmer * 4.0 * math.sin(self.frame * 0.04 + i * 1.7)
-                + self.shimmer * 1.5 * math.sin(self.frame * 0.11 + i * 3.1)
-                + self.shimmer * 0.5 * math.sin(self.frame * 0.23 + i * 0.9)
+                self.shimmer * 4.0 * math.sin(self.frame * 0.04 * direction + i * 1.7)
+                + self.shimmer * 1.5 * math.sin(self.frame * 0.11 * direction + i * 3.1)
+                + self.shimmer * 0.5 * math.sin(self.frame * 0.23 * direction + i * 0.9)
             )
             curtain_xs.append(base_x + sway)
 
