@@ -8,7 +8,7 @@ class SpiralVisualizer(BaseVisualizer):
 
     sliders = [
         Slider(name="Trail", attr="trail", min_val=1, max_val=10, step=1, fmt="d"),
-        Slider(name="Growth", attr="growth", min_val=0.1, max_val=0.6, step=0.05, fmt=".2f"),
+        Slider(name="Growth", attr="growth", min_val=0.2, max_val=0.6, step=0.05, fmt=".2f"),
     ]
 
     CHARS = {
@@ -53,7 +53,7 @@ class SpiralVisualizer(BaseVisualizer):
         self.trail = trail
         self.b = 0.25 / max(1, arm_gap)  # spiral tightness
         self.max_radius = min(self.width // 2, int(self.height / CHAR_ASPECT / 2)) - 1
-        self.growth = self.max_radius / 80.0  # responsive to terminal size
+        self.growth = self.max_radius / 50.0  # responsive to terminal size
 
     def _on_resize(self) -> None:
         old_max_radius = self.max_radius
@@ -75,24 +75,26 @@ class SpiralVisualizer(BaseVisualizer):
         cy = self.height // 2
         grid: list[list[str]] = [[" " for _ in range(self.width)] for _ in range(self.height)]
 
+        direction = -1 if self.reversed else 1
+
         # How far the spiral has expanded (grows over time, then resets)
-        cycle_length = 200
+        cycle_length = 120
         t = self.frame % cycle_length
-        fade_start = cycle_length - 30
+        fade_start = cycle_length - 20
 
         if t < fade_start:
-            max_theta = t * self.growth
+            max_theta = t * self.growth * direction
         else:
             # Fade phase: stop growing, age everything
-            max_theta = fade_start * self.growth
+            max_theta = fade_start * self.growth * direction
 
         fade_amount = max(0, t - fade_start) * 0.3
 
         # Draw the spiral trail
-        theta = 0.0
+        theta = 0.6  # start offset so first frame is visibly away from center
         step = 0.12
-        while theta < max_theta:
-            r = self.b * theta
+        while abs(theta) < abs(max_theta):
+            r = self.b * abs(theta)
             if r > self.max_radius:
                 break
 
@@ -108,7 +110,7 @@ class SpiralVisualizer(BaseVisualizer):
                 if char.strip():
                     grid[gy][gx] = f"{color}{char}{self.ANSI_RESET}"
 
-            theta += step
+            theta += 0.18
 
         # Pulsing center dot
         pulse = 0.5 + 0.5 * math.sin(self.frame * 0.2)

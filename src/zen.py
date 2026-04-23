@@ -232,6 +232,8 @@ class ZenVisualizer(BaseVisualizer):
         if sample_total == 0:
             return self._render_sand()
 
+        direction = -1 if self.reversed else 1
+
         sweep_rate = max(5.0, sample_total / 72.0)
         t_sweep = sample_total / sweep_rate
         t_hold = 12.0
@@ -239,13 +241,18 @@ class ZenVisualizer(BaseVisualizer):
         cycle = t_sweep + t_hold + t_fade
 
         t = self.frame % cycle
-        if t < t_sweep:
-            head_idx = min(sample_total - 1, int(t * sweep_rate))
+        sweep_actual = t_sweep * direction
+        if direction > 0:
+            t_normalized = t
+        else:
+            t_normalized = cycle - t
+        if t_normalized < abs(sweep_actual):
+            head_idx = min(sample_total - 1, int(t_normalized * sweep_rate))
             carved = head_idx + 1
             settle_bias = 0.02
             fade = 0.0
             show_head = True
-        elif t < t_sweep + t_hold:
+        elif t_normalized < abs(sweep_actual) + t_hold:
             head_idx = sample_total - 1
             carved = sample_total
             settle_bias = 0.28
@@ -255,7 +262,7 @@ class ZenVisualizer(BaseVisualizer):
             head_idx = sample_total - 1
             carved = sample_total
             settle_bias = 0.46
-            fade = (t - t_sweep - t_hold) / t_fade
+            fade = (t_normalized - abs(sweep_actual) - t_hold) / t_fade
             show_head = False
 
         grid: list[list[tuple[str, str] | None]] = [[None] * w for _ in range(h)]

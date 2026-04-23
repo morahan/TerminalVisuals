@@ -55,6 +55,7 @@ class WaveVisualizer(BaseVisualizer):
         center_x = self.width // 4  # each cell is 2 chars wide
         center_y = self.height // 2
         x_cells = self.width // 2
+        direction = -1 if self.reversed else 1
 
         for y in range(self.height):
             line = ""
@@ -71,7 +72,7 @@ class WaveVisualizer(BaseVisualizer):
                     freq = self.frequency + wave_idx * 0.1
 
                     wave_pos = math.sin(
-                        (x - center_x) * freq + self.frame * 0.15 + phase_offset
+                        (x - center_x) * freq + self.frame * 0.15 * direction + phase_offset
                     ) * amp
 
                     crest_y = wave_y + wave_pos

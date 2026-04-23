@@ -114,6 +114,7 @@ class RippleVisualizer(BaseVisualizer):
         w, h = self.width, self.height
         n = int(self.sources)
         freq = 2.0 * math.pi / self.wavelength
+        direction = -1 if self.reversed else 1
         inv_sqrt_n = 1.0 / math.sqrt(max(1, n))
         src_pos = self._source_positions(w, h, n)
         cx = w / 2.0
@@ -134,8 +135,8 @@ class RippleVisualizer(BaseVisualizer):
                     dist = math.sqrt(dx * dx + dy * dy)
                     dist = max(0.5, dist)
 
-                    phase = dist * freq - t * 0.12 + i * 0.9
-                    phase += 0.55 * math.sin(dist * 0.16 - t * 0.035 + i * 1.2)
+                    phase = dist * freq - t * 0.12 * direction + i * 0.9
+                    phase += 0.55 * math.sin(dist * 0.16 - t * 0.035 * direction + i * 1.2)
 
                     wave = math.sin(phase)
                     damping = 1.0 / (1.0 + 0.16 * dist)
