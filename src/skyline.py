@@ -583,6 +583,125 @@ class SkylineVisualizer(BaseVisualizer):
             self._paint(grid, x, base_y, self._get_char("horizontal"), "building", 11)
         return peak_x, peak_y
 
+    def _draw_dome(
+        self,
+        grid: list[list[tuple[int, str, str] | None]],
+        center: float,
+        base_y: int,
+        width: float,
+        height: float,
+        *,
+        with_cross: bool = True,
+    ) -> tuple[int, int]:
+        cx = int(round(center * (self.width - 1)))
+        width_px = max(5, int(round(width * self.width)))
+        height_px = max(4, int(round(height * max(6, base_y - 2))))
+        half = width_px // 2
+        radius = max(2, half)
+        drum_height = max(2, height_px // 3)
+        dome_top = max(1, base_y - drum_height - radius)
+
+        for y in range(base_y - drum_height + 1, base_y + 1):
+            if y > base_y:
+                continue
+            for x in range(cx - half, cx + half + 1):
+                self._paint(grid, x, y, self._get_char("solid"), "building", 10)
+        for y in range(base_y - drum_height + 1, base_y):
+            if (y - base_y) % 2 == 0:
+                for x in range(cx - half + 1, cx + half, 2):
+                    self._paint(grid, x, y, self._get_char("window"), "window", 14)
+
+        steps = max(18, radius * 8)
+        for idx in range(steps):
+            angle = math.pi + (idx / steps) * math.pi
+            x = cx + int(round(math.cos(angle) * radius))
+            y = (base_y - drum_height) + int(round(math.sin(angle) * radius))
+            self._paint(grid, x, y, self._get_char("dot"), "warm_accent", 17)
+        for x in range(cx - radius + 1, cx + radius):
+            self._paint(grid, x, base_y - drum_height, self._get_char("horizontal"), "warm_accent", 17)
+
+        if with_cross:
+            for offset in (1, 2):
+                self._paint(grid, cx, dome_top - offset, self._get_char("vertical"), "accent", 18)
+            self._paint(grid, cx - 1, dome_top - 1, self._get_char("horizontal"), "accent", 18)
+            self._paint(grid, cx + 1, dome_top - 1, self._get_char("horizontal"), "accent", 18)
+        return cx, dome_top
+
+    def _draw_chrysler_crown(
+        self,
+        grid: list[list[tuple[int, str, str] | None]],
+        cx: int,
+        top: int,
+    ) -> None:
+        for idx, span in enumerate((4, 3, 2, 1)):
+            y = top - idx
+            if y < 0:
+                break
+            for x in range(cx - span, cx + span + 1):
+                self._paint(grid, x, y, self._get_char("horizontal"), "warm_accent", 17)
+            if span >= 2:
+                self._paint(grid, cx - span, y, self._get_char("diag_up"), "accent", 17)
+                self._paint(grid, cx + span, y, self._get_char("diag_down"), "accent", 17)
+        mast_top = max(0, top - 6)
+        for y in range(mast_top, top - 3):
+            self._paint(grid, cx, y, self._get_char("vertical"), "accent", 18)
+        self._paint(grid, cx, mast_top - 1, self._get_char("spark"), "warm_accent", 19)
+
+    def _draw_sydney_tower(
+        self,
+        grid: list[list[tuple[int, str, str] | None]],
+        center: float,
+        horizon: int,
+    ) -> tuple[int, int]:
+        cx = int(round(center * (self.width - 1)))
+        build_height = max(6, horizon - 2)
+        height_px = max(8, int(round(0.74 * build_height)))
+        top = max(1, horizon - height_px)
+        turret_bottom = top + max(3, height_px // 8)
+        turret_top = max(top + 1, turret_bottom - 3)
+        turret_half = 2
+
+        for y in range(turret_bottom + 1, horizon + 1):
+            self._paint(grid, cx, y, self._get_char("vertical"), "building", 10)
+
+        for y in range(turret_top, turret_bottom + 1):
+            for x in range(cx - turret_half, cx + turret_half + 1):
+                self._paint(grid, x, y, self._get_char("solid"), "warm_accent", 17)
+        for x in range(cx - turret_half - 1, cx + turret_half + 2):
+            self._paint(grid, x, turret_top - 1, self._get_char("horizontal"), "warm_accent", 18)
+        self._paint(grid, cx - turret_half - 1, turret_top, self._get_char("diag_up"), "accent", 17)
+        self._paint(grid, cx + turret_half + 1, turret_top, self._get_char("diag_down"), "accent", 17)
+
+        for y in range(top, turret_top - 1):
+            self._paint(grid, cx, y, self._get_char("vertical"), "accent", 18)
+        return cx, top
+
+    def _draw_burj_al_arab(
+        self,
+        grid: list[list[tuple[int, str, str] | None]],
+        center: float,
+        horizon: int,
+    ) -> tuple[int, int]:
+        cx = int(round(center * (self.width - 1)))
+        build_height = max(6, horizon - 2)
+        height_px = max(10, int(round(0.78 * build_height)))
+        top = max(1, horizon - height_px)
+        sail_max = max(3, int(round(0.05 * self.width)) + 2)
+
+        for y in range(top, horizon + 1):
+            t = (y - top) / max(1, horizon - top)
+            sail_w = max(1, int(round(sail_max * math.sin(math.pi * (1.0 - t) * 0.5 + 0.18) ** 0.85)))
+            for dx in range(0, sail_w + 1):
+                self._paint(grid, cx + dx, y, self._get_char("solid"), "building", 10)
+            self._paint(grid, cx, y, self._get_char("vertical"), "accent", 17)
+            if (y - top) % 2 == 0 and sail_w >= 2:
+                self._paint(grid, cx + sail_w, y, self._get_char("diag_down"), "warm_accent", 16)
+
+        for y in range(top - 3, top):
+            self._paint(grid, cx, y, self._get_char("vertical"), "accent", 18)
+        self._paint(grid, cx, top - 4, self._get_char("spark"), "warm_accent", 19)
+        return cx, top
+
     def _add_stars(self, grid: list[list[tuple[int, str, str] | None]], horizon: int, seed: int) -> None:
         top_band = max(3, horizon - max(4, self.height // 4))
         threshold = 0.992 - self.glow * 0.0019
@@ -675,20 +794,40 @@ class SkylineVisualizer(BaseVisualizer):
         self._draw_profile_tower(grid, 0.08, 0.07, 0.22, horizon, [(0.0, 0.9), (1.0, 1.0)], seed + 1)
         self._draw_profile_tower(grid, 0.18, 0.08, 0.34, horizon, [(0.0, 0.72), (1.0, 1.0)], seed + 2)
         self._draw_profile_tower(grid, 0.29, 0.08, 0.48, horizon, [(0.0, 0.45), (0.24, 0.58), (1.0, 1.0)], seed + 3)
-        self._draw_profile_tower(grid, 0.40, 0.08, 0.68, horizon, [(0.0, 0.12), (0.12, 0.22), (0.26, 0.36), (0.58, 0.62), (1.0, 1.0)], seed + 4, spire_ratio=0.08, crown="crown")
-        self._draw_profile_tower(grid, 0.52, 0.08, 0.74, horizon, [(0.0, 0.18), (0.18, 0.30), (0.40, 0.44), (0.62, 0.62), (1.0, 1.0)], seed + 5, spire_ratio=0.11, crown="deck")
-        cx, top, _, _ = self._draw_profile_tower(grid, 0.67, 0.10, 0.90, horizon, [(0.0, 0.22), (0.18, 0.30), (0.42, 0.52), (1.0, 1.0)], seed + 6, spire_ratio=0.13)
-        self._draw_geometric_crown(grid, cx, top + 1, 6)
+        self._draw_profile_tower(
+            grid, 0.40, 0.08, 0.78, horizon,
+            [(0.0, 0.18), (0.08, 0.30), (0.18, 0.42), (0.40, 0.55), (0.66, 0.74), (1.0, 1.0)],
+            seed + 4, spire_ratio=0.18, crown="crown",
+        )
+        chrysler_cx, chrysler_top, _, _ = self._draw_profile_tower(
+            grid, 0.52, 0.08, 0.72, horizon,
+            [(0.0, 0.20), (0.20, 0.34), (0.50, 0.58), (1.0, 1.0)],
+            seed + 5,
+        )
+        self._draw_chrysler_crown(grid, chrysler_cx, chrysler_top)
+        cx, top, _, _ = self._draw_profile_tower(
+            grid, 0.67, 0.10, 0.92, horizon,
+            [(0.0, 0.18), (0.32, 0.36), (1.0, 1.0)],
+            seed + 6, spire_ratio=0.16,
+        )
+        self._draw_geometric_crown(grid, cx, top + 1, 5)
         self._draw_profile_tower(grid, 0.79, 0.07, 0.56, horizon, [(0.0, 0.32), (0.20, 0.46), (1.0, 1.0)], seed + 7)
         self._draw_profile_tower(grid, 0.89, 0.07, 0.28, horizon, [(0.0, 0.76), (1.0, 1.0)], seed + 8)
 
     @city_scene("Paris")
     def _draw_paris(self, grid: list[list[tuple[int, str, str] | None]], horizon: int, seed: int) -> None:
-        for center, width, height in ((0.10, 0.10, 0.18), (0.24, 0.10, 0.22), (0.39, 0.12, 0.20), (0.72, 0.14, 0.22), (0.88, 0.08, 0.18)):
+        for center, width, height in ((0.39, 0.12, 0.20), (0.72, 0.14, 0.22), (0.92, 0.06, 0.18)):
             self._draw_profile_tower(grid, center, width, height, horizon, [(0.0, 0.92), (1.0, 1.0)], seed + int(center * 10))
+        self._draw_dome(grid, 0.10, horizon, 0.06, 0.22, with_cross=True)
         self._draw_arc_de_triomphe(grid, 0.22, horizon, 0.10)
         self._draw_eiffel(grid, 0.56, 0.20, 0.86, horizon, kind="warm_accent")
         self._draw_profile_tower(grid, 0.64, 0.09, 0.24, horizon, [(0.0, 0.70), (1.0, 1.0)], seed + 11)
+        self._draw_profile_tower(grid, 0.80, 0.05, 0.20, horizon, [(0.0, 0.85), (1.0, 1.0)], seed + 12)
+        self._draw_profile_tower(grid, 0.85, 0.05, 0.20, horizon, [(0.0, 0.85), (1.0, 1.0)], seed + 13)
+        notre_cx = int(round(0.825 * (self.width - 1)))
+        notre_top = max(1, horizon - int(round(0.28 * max(6, horizon - 2))))
+        for y in range(notre_top, horizon - 1):
+            self._paint(grid, notre_cx, y, self._get_char("vertical"), "accent", 17)
 
     @city_scene("London")
     def _draw_london(self, grid: list[list[tuple[int, str, str] | None]], horizon: int, seed: int) -> None:
@@ -706,28 +845,46 @@ class SkylineVisualizer(BaseVisualizer):
         self._draw_line(grid, wheel_cx, wheel_cy + wheel_radius, wheel_cx + 2, horizon + 1, "accent", 14)
         cx, top, _, _ = self._draw_profile_tower(grid, 0.44, 0.05, 0.64, horizon, [(0.0, 0.50), (0.18, 0.72), (1.0, 1.0)], seed + 2, spire_ratio=0.08)
         self._draw_clock(grid, cx, top + max(2, (horizon - top) // 4), 1)
-        self._draw_profile_tower(grid, 0.58, 0.06, 0.38, horizon, [(0.0, 0.42), (0.55, 0.82), (1.0, 1.0)], seed + 3)
-        self._draw_profile_tower(grid, 0.69, 0.08, 0.86, horizon, [(0.0, 0.10), (0.25, 0.26), (1.0, 1.0)], seed + 4, spire_ratio=0.10)
-        self._draw_profile_tower(grid, 0.84, 0.07, 0.28, horizon, [(0.0, 0.86), (1.0, 1.0)], seed + 5)
+        self._draw_dome(grid, 0.56, horizon, 0.10, 0.20, with_cross=True)
+        shard_cx, shard_top, shard_left, shard_right = self._draw_profile_tower(
+            grid, 0.70, 0.08, 0.92, horizon,
+            [(0.0, 0.06), (0.40, 0.30), (1.0, 1.0)],
+            seed + 4, spire_ratio=0.18,
+        )
+        self._draw_line(grid, shard_left, horizon - 1, shard_cx, shard_top + 2, "accent", 16)
+        self._draw_line(grid, shard_right, horizon - 1, shard_cx, shard_top + 2, "accent", 16)
+        self._draw_profile_tower(
+            grid, 0.85, 0.06, 0.40, horizon,
+            [(0.0, 0.40), (0.10, 0.55), (0.30, 0.95), (0.55, 1.00), (0.85, 0.85), (1.0, 0.65)],
+            seed + 5,
+        )
 
     @city_scene("Tokyo")
     def _draw_tokyo(self, grid: list[list[tuple[int, str, str] | None]], horizon: int, seed: int) -> None:
         self._draw_profile_tower(grid, 0.10, 0.08, 0.26, horizon, [(0.0, 0.82), (1.0, 1.0)], seed + 1)
         self._draw_profile_tower(grid, 0.20, 0.08, 0.34, horizon, [(0.0, 0.62), (1.0, 1.0)], seed + 2)
-        self._draw_pagoda(grid, 0.34, horizon, 0.46)
-        self._draw_profile_tower(grid, 0.47, 0.08, 0.42, horizon, [(0.0, 0.70), (1.0, 1.0)], seed + 3)
-        cx, top, _, _ = self._draw_profile_tower(grid, 0.69, 0.08, 0.90, horizon, [(0.0, 0.08), (0.12, 0.16), (0.28, 0.20), (0.50, 0.28), (1.0, 1.0)], seed + 4, spire_ratio=0.06, crown="deck")
-        for y in (top + 3, top + 6):
+        self._draw_eiffel(grid, 0.32, 0.14, 0.46, horizon, kind="warm_accent")
+        self._draw_pagoda(grid, 0.46, horizon, 0.42)
+        self._draw_profile_tower(grid, 0.56, 0.07, 0.36, horizon, [(0.0, 0.74), (1.0, 1.0)], seed + 3)
+        cx, top, _, _ = self._draw_profile_tower(
+            grid, 0.70, 0.08, 0.96, horizon,
+            [(0.0, 0.06), (0.10, 0.10), (0.55, 0.20), (1.0, 1.0)],
+            seed + 4, spire_ratio=0.10,
+        )
+        height_px = max(1, horizon - top)
+        for frac in (0.20, 0.40):
+            y = top + int(round(height_px * frac))
             for x in range(cx - 2, cx + 3):
                 self._paint(grid, x, y, self._get_char("horizontal"), "accent", 17)
-        self._draw_profile_tower(grid, 0.82, 0.08, 0.40, horizon, [(0.0, 0.76), (1.0, 1.0)], seed + 5)
-        self._draw_profile_tower(grid, 0.91, 0.06, 0.26, horizon, [(0.0, 0.84), (1.0, 1.0)], seed + 6)
+        self._draw_profile_tower(grid, 0.84, 0.07, 0.34, horizon, [(0.0, 0.78), (1.0, 1.0)], seed + 5)
+        self._draw_profile_tower(grid, 0.92, 0.06, 0.24, horizon, [(0.0, 0.86), (1.0, 1.0)], seed + 6)
 
     @city_scene("Sydney")
     def _draw_sydney(self, grid: list[list[tuple[int, str, str] | None]], horizon: int, seed: int) -> None:
         self._draw_profile_tower(grid, 0.14, 0.07, 0.32, horizon, [(0.0, 0.64), (1.0, 1.0)], seed + 1)
         self._draw_profile_tower(grid, 0.24, 0.09, 0.46, horizon, [(0.0, 0.44), (1.0, 1.0)], seed + 2)
         self._draw_profile_tower(grid, 0.36, 0.08, 0.28, horizon, [(0.0, 0.82), (1.0, 1.0)], seed + 3)
+        self._draw_sydney_tower(grid, 0.44, horizon)
         self._draw_bridge_arc(grid, 0.16, 0.82, horizon - 3, max(3, horizon // 6))
         shell_base = horizon - 1
         self._draw_shell(grid, 0.56, shell_base, 0.10, 0.22, -0.10)
@@ -737,13 +894,34 @@ class SkylineVisualizer(BaseVisualizer):
 
     @city_scene("Dubai")
     def _draw_dubai(self, grid: list[list[tuple[int, str, str] | None]], horizon: int, seed: int) -> None:
-        self._draw_profile_tower(grid, 0.14, 0.08, 0.24, horizon, [(0.0, 0.84), (1.0, 1.0)], seed + 1)
-        self._draw_profile_tower(grid, 0.28, 0.08, 0.52, horizon, [(0.0, 0.22), (0.24, 0.34), (1.0, 1.0)], seed + 2, spire_ratio=0.06)
-        self._draw_profile_tower(grid, 0.40, 0.08, 0.62, horizon, [(0.0, 0.12), (0.24, 0.26), (0.44, 0.38), (1.0, 1.0)], seed + 3, spire_ratio=0.08)
-        cx, top, _, _ = self._draw_profile_tower(grid, 0.58, 0.10, 0.98, horizon, [(0.0, 0.04), (0.06, 0.08), (0.16, 0.14), (0.28, 0.22), (0.42, 0.34), (0.58, 0.48), (0.78, 0.72), (1.0, 1.0)], seed + 4, spire_ratio=0.15, crown="deck")
+        self._draw_burj_al_arab(grid, 0.10, horizon)
+        self._draw_profile_tower(
+            grid, 0.26, 0.05, 0.56, horizon,
+            [(0.0, 0.18), (0.20, 0.28), (1.0, 1.0)],
+            seed + 1, spire_ratio=0.06,
+        )
+        self._draw_profile_tower(
+            grid, 0.32, 0.05, 0.56, horizon,
+            [(0.0, 0.18), (0.20, 0.28), (1.0, 1.0)],
+            seed + 2, spire_ratio=0.06,
+        )
+        self._draw_profile_tower(
+            grid, 0.40, 0.07, 0.50, horizon,
+            [(0.0, 0.45), (0.5, 0.65), (1.0, 1.0)],
+            seed + 3, crown="deck",
+        )
+        cx, top, _, _ = self._draw_profile_tower(
+            grid, 0.58, 0.10, 1.00, horizon,
+            [(0.0, 0.04), (0.06, 0.08), (0.16, 0.14), (0.28, 0.22), (0.42, 0.34), (0.58, 0.48), (0.78, 0.72), (1.0, 1.0)],
+            seed + 4, spire_ratio=0.22, crown="deck",
+        )
         self._draw_geometric_crown(grid, cx, top + 1, 8)
-        self._draw_profile_tower(grid, 0.72, 0.08, 0.68, horizon, [(0.0, 0.18), (0.20, 0.30), (0.42, 0.42), (1.0, 1.0)], seed + 5, spire_ratio=0.06)
-        self._draw_profile_tower(grid, 0.84, 0.08, 0.48, horizon, [(0.0, 0.30), (0.20, 0.44), (1.0, 1.0)], seed + 6)
+        self._draw_profile_tower(
+            grid, 0.72, 0.08, 0.55, horizon,
+            [(0.0, 0.20), (0.30, 0.36), (1.0, 1.0)],
+            seed + 5, spire_ratio=0.04,
+        )
+        self._draw_profile_tower(grid, 0.86, 0.07, 0.30, horizon, [(0.0, 0.78), (1.0, 1.0)], seed + 6)
 
     def _build_transition_scene(self, city_from: str, city_to: str) -> dict:
         from_scene = self._scene(city_from)
