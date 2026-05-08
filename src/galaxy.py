@@ -35,7 +35,7 @@ class GalaxyVisualizer(BaseVisualizer):
     MAX_STARS = 6000
 
     sliders = [
-        Slider(name="Depth", attr="depth", min_val=0.10, max_val=0.50, step=0.05, fmt=".2f"),
+        Slider(name="Depth", attr="depth", min_val=0.30, max_val=1.00, step=0.05, fmt=".2f"),
         Slider(name="Drift", attr="drift", min_val=0.5, max_val=3.0, step=0.25, fmt=".2f"),
     ]
 
@@ -46,7 +46,7 @@ class GalaxyVisualizer(BaseVisualizer):
         brightness: int = 100,
         ascii_mode: bool = False,
         oneshot: bool = False,
-        depth: float = 0.22,
+        depth: float = 1.0,
         drift: float = 0.75,
     ):
         super().__init__(size, speed, brightness, ascii_mode, oneshot)
@@ -78,9 +78,9 @@ class GalaxyVisualizer(BaseVisualizer):
         return min(self.MAX_STARS, max(self.MIN_STARS, count))
 
     def _screen_radii(self) -> tuple[float, float]:
-        x_radius = max(1.0, (self.width - 1) * 0.49)
-        y_limit = max(1.0, (self.height - 1) * 0.48)
-        y_radius = min(y_limit, x_radius * max(0.05, self.depth))
+        x_radius = max(1.0, (self.width - 1) * 0.5)
+        y_full = max(1.0, (self.height - 1) * 0.5)
+        y_radius = max(1.0, y_full * max(0.1, self.depth))
         return x_radius, y_radius
 
     def _rotation_amount(self) -> float:
