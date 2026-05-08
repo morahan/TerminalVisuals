@@ -5,18 +5,18 @@ from src.base import BaseVisualizer, Slider
 
 
 class EmberVisualizer(BaseVisualizer):
-    """Embers and flame — dynamic fire with dancing columns and flying sparks."""
+    """Embers and flame — a continuous heat field with rising tongues and floating sparks."""
 
     CHARS = {
-        "peak":       "\u25cf",   # ●
-        "bright":     "\u25c6",   # ◆
-        "medium":     "\u2022",   # •
-        "dim":        "\u00b7",   # ·
-        "glow_heavy": "\u2593",   # ▓
-        "glow_mid":   "\u2592",   # ▒
-        "glow_light": "\u2591",   # ░
-        "ember_hot":  "\u2219",   # ∙
-        "ember_warm": "\u00b7",   # ·
+        "peak":       "●",   # ●
+        "bright":     "◆",   # ◆
+        "medium":     "•",   # •
+        "dim":        "·",   # ·
+        "glow_heavy": "▓",   # ▓
+        "glow_mid":   "▒",   # ▒
+        "glow_light": "░",   # ░
+        "ember_hot":  "∙",   # ∙
+        "ember_warm": "·",   # ·
         "spark":      "*",
         "trail":      "'",
         "peak_ascii":       "O",
@@ -53,23 +53,7 @@ class EmberVisualizer(BaseVisualizer):
         self.density = density
         self.warmth = warmth
         self.turbulence = turbulence
-        self._seed_flames()
         self._seed_embers()
-
-    def _seed_flames(self) -> None:
-        random.seed(77)
-        self.flames = []
-        for _ in range(40):
-            self.flames.append({
-                "base_x": random.random(),
-                "sway_freq": 0.3 + random.random() * 0.5,
-                "sway_phase": random.random() * math.pi * 2,
-                "sway_amp": 0.3 + random.random() * 0.7,
-                "flicker_freq": 0.5 + random.random() * 0.8,
-                "flicker_phase": random.random() * math.pi * 2,
-                "height_mult": 0.5 + random.random() * 0.5,
-                "width": 0.03 + random.random() * 0.04,
-            })
 
     def _seed_embers(self) -> None:
         random.seed(55)
@@ -100,28 +84,32 @@ class EmberVisualizer(BaseVisualizer):
     def _fire_color(self, heat: float) -> str:
         """Color for flame at given heat level (0=cool, 1=hot)."""
         dim = self.brightness < 50
-        if heat > 0.9 and self.brightness >= 100:
-            return "97"  # white
-        elif heat > 0.75:
+        if heat > 0.92 and self.brightness >= 100:
+            return "97"  # white-hot core
+        elif heat > 0.78:
             return "93" if not dim else "2;93"  # yellow
-        elif heat > 0.55:
+        elif heat > 0.58:
             return "33" if not dim else "2;33"  # orange
-        elif heat > 0.35:
+        elif heat > 0.38:
             return "91" if not dim else "2;91"  # light red
-        elif heat > 0.15:
+        elif heat > 0.18:
             return "31" if not dim else "2;31"  # red
         else:
             return "2;31"  # dim red
 
-    def _fire_char(self, heat: float, edge: float) -> str:
-        """Character for flame: heat controls brightness, edge (0=center, 1=edge)."""
-        if heat > 0.8 and edge < 0.3:
+    def _fire_char(self, heat: float) -> str:
+        """Character for flame body, chosen by heat. Cooler heats use soft block glyphs."""
+        if heat > 0.85:
             return self._get_char("peak")
-        elif heat > 0.6 and edge < 0.5:
+        if heat > 0.68:
             return self._get_char("bright")
-        elif heat > 0.4:
+        if heat > 0.50:
             return self._get_char("medium")
-        return self._get_char("dim")
+        if heat > 0.32:
+            return self._get_char("glow_heavy")
+        if heat > 0.20:
+            return self._get_char("glow_mid")
+        return self._get_char("glow_light")
 
     def _ember_color(self, heat: float) -> str:
         """Color for ember particle at given heat."""
@@ -147,135 +135,150 @@ class EmberVisualizer(BaseVisualizer):
     def render_frame(self) -> str:
         w, h = self.width, self.height
         grid: list[list[str]] = [[" " for _ in range(w)] for _ in range(h)]
-        direction = -1 if self.reversed else 1
+        t = self.frame * 0.12
 
-        # === GROUND GLOW ===
-        ground_rows = min(4, max(2, h // 5))
-        t = self.frame * self.turbulence
-        for gy in range(h - ground_rows, h):
-            depth = h - gy
-            for gx in range(w):
-                # Chaotic flickering
-                glow_val = (
-                    0.4
-                    + 0.3 * math.sin(gx * 0.12 + t * 0.08)
-                    + 0.15 * math.sin(gx * 0.31 - t * 0.05)
-                    + 0.1 * math.sin(gx * 0.07 + t * 0.13)
-                    + 0.05 * math.sin(gx * 0.5 + t * 0.2)
+        # === HEAT FIELD ===
+        # Continuous flame body. For each cell compute a heat value driven by:
+        #   - vertical base profile (hot at bottom, fading up),
+        #   - low-frequency horizontal warmth that wanders over time,
+        #   - multi-octave noise producing rising tongues.
+        warmth = self.warmth
+        turb = self.turbulence
+        # warmth boosts vertical reach: higher warmth pushes heat further up.
+        reach = 0.45 + 0.55 * warmth  # ~0.7 .. ~2.1
+        heat_field: list[list[float]] = [[0.0] * w for _ in range(h)]
+
+        for y in range(h):
+            # Vertical profile: 1 at bottom (large y), 0 at top, lifted by warmth.
+            v = y / max(1, h - 1)
+            base = (v ** (2.0 / max(0.6, reach)))
+
+            # Tongues lean/curl as they rise — phase grows as we move upward
+            # (i.e. toward y=0). dy_top is distance from the top of the screen.
+            dy_top = (h - 1 - y)
+            y_phase = dy_top * 0.35
+
+            for x in range(w):
+                # Slow wandering horizontal warmth — a couple of broad hot spots
+                # drift across the bed without ever forming a flat stripe.
+                hw = (
+                    0.55
+                    + 0.30 * math.sin(x * 0.045 + t * 0.45)
+                    + 0.15 * math.sin(x * 0.11 - t * 0.27 + 1.7)
                 )
-                if glow_val < 0.25:
+
+                # Multi-octave turbulence — these are the rising flame tongues.
+                # Higher octaves carry less weight; vertical phase rise makes
+                # them appear to lick upward as t advances.
+                n1 = math.sin(x * 0.18 + y_phase + t * 1.10)
+                n2 = math.sin(x * 0.37 - y_phase * 0.7 + t * 1.65 + 2.1)
+                n3 = math.sin(x * 0.71 + y_phase * 1.3 - t * 2.30 + 0.7)
+                noise = (n1 * 0.55 + n2 * 0.30 + n3 * 0.15)
+
+                # Combine. Noise is centred around 0 and weighted toward the
+                # top (where base is fading) so it carves the upper flame edge
+                # into ragged tongues without disturbing the hot base.
+                heat = base * hw + noise * 0.42 * (1.0 - v) * turb
+                # Subtle global flicker to keep the body alive even when still.
+                heat *= 0.92 + 0.08 * math.sin(t * 1.9 + x * 0.05)
+
+                if heat < 0.0:
+                    heat = 0.0
+                elif heat > 1.0:
+                    heat = 1.0
+                heat_field[y][x] = heat
+
+        # === RENDER FLAME BODY ===
+        # Threshold below which we leave the cell empty — this gives the top
+        # of the flame ragged, organic edges and prevents any solid row.
+        for y in range(h):
+            row = heat_field[y]
+            for x in range(w):
+                heat = row[x]
+                if heat < 0.18:
                     continue
-                intensity = glow_val * (depth / ground_rows)
-                if depth == 1:
-                    char = self._get_char("glow_heavy")
-                    code = "33" if self.brightness >= 50 else "2;33"
-                elif depth == 2:
-                    char = self._get_char("glow_mid")
-                    code = "31" if intensity > 0.5 else "2;31"
-                elif depth == 3:
-                    char = self._get_char("glow_light")
-                    code = "2;31" if intensity > 0.4 else "2;2;31"
+                char = self._fire_char(heat)
+                code = self._fire_color(heat)
+                grid[y][x] = f"{self._color(code)}{char}{self.ANSI_RESET}"
+
+        # === COAL BED ===
+        # Bottom 1–2 rows: probabilistic bright embers where the heat field is
+        # hottest, with per-cell flicker. Probabilistic + flicker means the row
+        # is never fully filled, so it reads as glowing coals — never a bar.
+        coal_rows = 1 if h < 14 else 2
+        for cy in range(h - coal_rows, h):
+            if cy < 0:
+                continue
+            for cx in range(w):
+                heat = heat_field[cy][cx]
+                if heat < 0.55:
+                    continue
+                flicker = 0.5 + 0.5 * math.sin(cx * 0.43 + t * 2.7 + cy * 1.1)
+                if flicker < 0.35:
+                    continue
+                hot = min(1.0, heat * (0.7 + 0.5 * flicker))
+                if hot > 0.85:
+                    char = self._get_char("ember_hot")
                 else:
-                    char = self._get_char("glow_light")
-                    code = "2;2;31"
-                grid[gy][gx] = f"{self._color(code)}{char}{self.ANSI_RESET}"
-
-        # === FLAME COLUMNS ===
-        flame_height = int((h - ground_rows) * 0.35 * self.warmth)
-        num_flames = min(35, max(8, int(w * 0.08 * self.warmth)))
-
-        for fi, fl in enumerate(self.flames[:num_flames]):
-            # Swaying center x
-            sway = (
-                math.sin(t * fl["sway_freq"] + fl["sway_phase"]) * fl["sway_amp"] * self.turbulence
-                + math.sin(t * fl["sway_freq"] * 1.7 + fl["sway_phase"] * 0.7) * fl["sway_amp"] * 0.5 * self.turbulence
-            )
-            cx = int((fl["base_x"] + sway * 0.01) * w) % w
-
-            # Flicker intensity for this flame
-            flicker = 0.6 + 0.4 * (
-                math.sin(t * fl["flicker_freq"] * 2.3 + fl["flicker_phase"]) ** 2
-                * math.sin(t * fl["flicker_freq"] * 0.7 + fl["flicker_phase"] * 1.3)
-            )
-            flicker = max(0.2, min(1.0, flicker))
-
-            fheight = int(flame_height * fl["height_mult"] * flicker)
-            half_w = int(fl["width"] * w * self.warmth * flicker)
-            half_w = max(1, half_w)
-
-            for dy in range(fheight):
-                gy = h - ground_rows - 1 - dy
-                if gy < 0:
-                    break
-                # Heat decreases with height
-                heat = 1.0 - (dy / max(1, fheight)) ** 1.5
-                heat *= flicker
-
-                # Gaussian-ish horizontal profile
-                for dx in range(-half_w, half_w + 1):
-                    gx = (cx + dx) % w
-                    dist = abs(dx) / max(1, half_w)
-                    edge_factor = dist ** 1.5
-                    cell_heat = heat * (1.0 - edge_factor * 0.6)
-
-                    if cell_heat < 0.08:
-                        continue
-
-                    char = self._fire_char(cell_heat, edge_factor)
-                    code = self._fire_color(cell_heat)
-                    grid[gy][gx] = f"{self._color(code)}{char}{self.ANSI_RESET}"
+                    char = self._get_char("glow_heavy")
+                code = self._fire_color(hot)
+                grid[cy][cx] = f"{self._color(code)}{char}{self.ANSI_RESET}"
 
         # === FLYING EMBERS ===
+        # Embers always rise. They're suppressed inside the dense flame body
+        # (where they'd be invisible anyway) and only emit trails above the
+        # smoke line so they don't smear the bright core.
         count = int(self.density)
         for idx in range(min(count, len(self.embers))):
             e = self.embers[idx]
 
-            # Vertical: rises upward with deceleration
-            y_norm = (1.0 - (self.frame * 0.006 * e["rise_speed"] * direction + e["y_offset"])) % 1.0
+            # Vertical: rises upward with deceleration.
+            y_norm = (1.0 - (self.frame * 0.006 * e["rise_speed"] + e["y_offset"])) % 1.0
             y = int(y_norm * (h - 2))
-            if y < 0 or y >= h - ground_rows:
+            if y < 0 or y >= h:
                 continue
 
-            # Horizontal wobble with turbulence
+            # Horizontal wobble — this is what `reverse` flips, so the embers
+            # drift the other way without breaking gravity.
+            wobble_dir = -1 if self.reversed else 1
             wobble = (
                 math.sin(self.frame * 0.04 * e["wobble_freq"] + e["wobble_phase"]) * e["wobble_amp"]
                 + math.sin(self.frame * 0.02 * e["wobble_freq"] * 1.3) * e["wobble_amp"] * 0.5 * self.turbulence
-            )
+            ) * wobble_dir
             x = int(e["base_x"] * w + wobble) % w
 
-            # Heat decay as it rises
-            heat = max(0.0, e["heat"] - y_norm * 0.6)
+            # Skip embers buried in the dense flame body — keeps things readable.
+            if heat_field[y][x] > 0.55:
+                continue
 
-            # Pulse
+            heat = max(0.0, e["heat"] - y_norm * 0.6)
             raw_pulse = math.sin(self.frame * 0.04 * e["pulse_freq"] + e["pulse_phase"])
             brightness_val = raw_pulse * raw_pulse
             combined = brightness_val * (0.4 + 0.6 * e["size_seed"]) * (0.3 + 0.7 * heat)
-
             if combined < 0.06 or heat < 0.05:
                 continue
 
-            # Draw ember
             char = self._ember_char(combined * heat)
             code = self._ember_color(heat * combined)
             grid[y][x] = f"{self._color(code)}{char}{self.ANSI_RESET}"
 
-            # Trail for brighter, hotter embers
+            # Trails only outside the flame body.
             if combined > 0.3 and heat > 0.3:
                 trail_len = int(2 + 3 * heat * combined)
                 for ti in range(1, trail_len + 1):
                     ty = y + ti
-                    if ty >= h - ground_rows:
+                    if ty >= h:
+                        break
+                    tx = (x + int(wobble * 0.1 * ti)) % w
+                    if heat_field[ty][tx] > 0.35:
                         break
                     trail_heat = heat * (1.0 - ti / (trail_len + 1)) * 0.6
                     if trail_heat < 0.08:
                         break
-                    tx = (x + int(wobble * 0.1 * ti)) % w
-                    trail_char = self._get_char("trail")
-                    trail_code = self._ember_color(trail_heat * 0.7)
                     if grid[ty][tx] == " ":
+                        trail_char = self._get_char("trail")
+                        trail_code = self._ember_color(trail_heat * 0.7)
                         grid[ty][tx] = f"{self._color(trail_code)}{trail_char}{self.ANSI_RESET}"
 
-        lines = []
-        for row in grid:
-            lines.append("".join(row))
+        lines = ["".join(row) for row in grid]
         return "\n".join(lines) + f"\033[{h + 1};1H"
