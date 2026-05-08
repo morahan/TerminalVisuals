@@ -13,6 +13,7 @@ from typing import Callable, Optional
 CHAR_ASPECT = 0.5
 HUD_ROWS = 3
 TARGET_FPS = 30
+MAX_RENDER_CELLS = 12000
 
 # Input event constants
 INPUT_NONE = 0
@@ -92,7 +93,14 @@ class BaseVisualizer(ABC):
 
     def _terminal_fit_dims(self) -> tuple[int, int]:
         cols, lines = self._get_terminal_size()
-        return cols, max(1, lines - self.hud_rows)
+        return self._fit_auto_dims(cols, lines)
+
+    def _fit_auto_dims(self, cols: int, lines: int) -> tuple[int, int]:
+        cols = max(1, cols)
+        height = max(1, lines - self.hud_rows)
+        if cols * height <= MAX_RENDER_CELLS:
+            return cols, height
+        return cols, max(1, MAX_RENDER_CELLS // cols)
 
     def _update_size(self) -> None:
         """Re-fit size to current terminal dimensions. Called each frame when auto_size is on."""
@@ -102,8 +110,7 @@ class BaseVisualizer(ABC):
             self._needs_full_clear = True
         if not self.auto_size:
             return
-        new_w = max(1, term_size[0])
-        new_h = max(1, term_size[1] - self.hud_rows)
+        new_w, new_h = self._fit_auto_dims(*term_size)
         if new_w != self.width or new_h != self.height:
             self.width = new_w
             self.height = new_h
@@ -274,8 +281,12 @@ class BaseVisualizer(ABC):
 
     def _restore_mode(self) -> None:
         if self._old_term_settings is not None:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_term_settings)
-            self._old_term_settings = None
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_term_settings)
+            except (termios.error, AttributeError, OSError):
+                pass
+            finally:
+                self._old_term_settings = None
 
     def _enter_alt_screen(self) -> None:
         try:
@@ -306,11 +317,11 @@ class BaseVisualizer(ABC):
             pass
 
     def _cleanup(self) -> None:
-        self._restore_mode()
-        self._show_cursor()
-        self._exit_alt_screen()
         try:
             sys.stdout.write(self.ANSI_RESET)
             sys.stdout.flush()
         except (BrokenPipeError, OSError):
             pass
+        self._show_cursor()
+        self._exit_alt_screen()
+        self._restore_mode()

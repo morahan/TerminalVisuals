@@ -52,14 +52,17 @@ class SpiralVisualizer(BaseVisualizer):
         self.arm_gap = arm_gap
         self.trail = trail
         self.b = 0.25 / max(1, arm_gap)  # spiral tightness
-        self.max_radius = min(self.width // 2, int(self.height / CHAR_ASPECT / 2)) - 1
-        self.growth = self.max_radius / 50.0  # responsive to terminal size
+        self.max_radius = self._calc_max_radius()
+        self.growth = max(0.02, self.max_radius / 50.0)  # responsive to terminal size
 
     def _on_resize(self) -> None:
         old_max_radius = self.max_radius
-        self.max_radius = min(self.width // 2, int(self.height / CHAR_ASPECT / 2)) - 1
+        self.max_radius = self._calc_max_radius()
         if old_max_radius > 0:
-            self.growth = self.growth * self.max_radius / old_max_radius
+            self.growth = max(0.02, self.growth * self.max_radius / old_max_radius)
+
+    def _calc_max_radius(self) -> int:
+        return max(1, min(self.width // 2, int(self.height / CHAR_ASPECT / 2)) - 1)
 
     def _get_char(self, name: str) -> str:
         if self.ascii_mode:
