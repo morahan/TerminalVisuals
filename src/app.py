@@ -40,7 +40,7 @@ class App:
         wave_count: int = 3,
         foam: bool = True,
         depth: float = 0.22,
-        drift: float = 1.5,
+        drift: float = 0.75,
         arm_gap: int = 2,
         trail: int = 4,
         spread: float = 0.30,
@@ -61,7 +61,7 @@ class App:
 
         self.visualizers: list[BaseVisualizer] = [
             WaveVisualizer(**common, wave_count=wave_count, foam=foam),
-            GalaxyVisualizer(**common, drift=drift),
+            GalaxyVisualizer(**common, depth=depth, drift=drift),
             SpiralVisualizer(**common, arm_gap=arm_gap, trail=trail),
             DysonVisualizer(**common, spread=spread, orbit_speed=orbit_speed),
             AuroraVisualizer(**common, curtains=curtains, shimmer=shimmer),

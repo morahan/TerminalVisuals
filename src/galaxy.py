@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 
-from src.base import BaseVisualizer, Slider, CHAR_ASPECT
+from src.base import BaseVisualizer, Slider
 
 
 class GalaxyVisualizer(BaseVisualizer):
@@ -26,12 +26,17 @@ class GalaxyVisualizer(BaseVisualizer):
         "dust_ascii": " ",
     }
 
+    ARMS = 3
+    TWIST = 0.8
+    CORE = 0.7
+    DUST = 0.5
+    STAR_DENSITY = 0.65
+    MIN_STARS = 600
+    MAX_STARS = 6000
+
     sliders = [
-        Slider(name="Arms", attr="arms", min_val=2, max_val=6, step=1, fmt="d"),
-        Slider(name="Twist", attr="twist", min_val=0.3, max_val=1.5, step=0.1),
-        Slider(name="Core", attr="core", min_val=0.2, max_val=1.2, step=0.1),
-        Slider(name="Drift", attr="drift", min_val=0.3, max_val=3.0, step=0.25),
-        Slider(name="Dust", attr="dust", min_val=0.0, max_val=1.0, step=0.1),
+        Slider(name="Depth", attr="depth", min_val=0.10, max_val=0.50, step=0.05, fmt=".2f"),
+        Slider(name="Drift", attr="drift", min_val=0.5, max_val=3.0, step=0.25, fmt=".2f"),
     ]
 
     def __init__(
@@ -41,24 +46,18 @@ class GalaxyVisualizer(BaseVisualizer):
         brightness: int = 100,
         ascii_mode: bool = False,
         oneshot: bool = False,
-        arms: int = 3,
-        twist: float = 0.8,
-        core: float = 0.7,
-        drift: float = 1.5,
-        dust: float = 0.5,
+        depth: float = 0.22,
+        drift: float = 0.75,
     ):
         super().__init__(size, speed, brightness, ascii_mode, oneshot)
-        self.arms = arms
-        self.twist = twist
-        self.core = core
+        self.depth = depth
         self.drift = drift
-        self.dust = dust
         self._init_stars()
 
     def _init_stars(self) -> None:
         rng = random.Random(42)
         self.stars = []
-        for _ in range(1400):
+        for _ in range(self._star_count()):
             angle = rng.random() * math.tau
             dist = rng.random() ** 0.45
             brightness = rng.random()
@@ -73,6 +72,20 @@ class GalaxyVisualizer(BaseVisualizer):
 
     def _on_resize(self) -> None:
         self._init_stars()
+
+    def _star_count(self) -> int:
+        count = int(self.width * self.height * self.STAR_DENSITY)
+        return min(self.MAX_STARS, max(self.MIN_STARS, count))
+
+    def _screen_radii(self) -> tuple[float, float]:
+        x_radius = max(1.0, (self.width - 1) * 0.49)
+        y_limit = max(1.0, (self.height - 1) * 0.48)
+        y_radius = min(y_limit, x_radius * max(0.05, self.depth))
+        return x_radius, y_radius
+
+    def _rotation_amount(self) -> float:
+        direction = -1 if self.reversed else 1
+        return self.frame * (0.006 + 0.012 * self.drift) * direction
 
     def _get_char(self, name: str) -> str:
         if self.ascii_mode:
@@ -105,38 +118,38 @@ class GalaxyVisualizer(BaseVisualizer):
         return f"\033[{code}m"
 
     def _galaxy_coords(self, star_angle: float, star_dist: float) -> tuple[float, float, float]:
-        direction = -1 if self.reversed else 1
-        rotation = self.frame * (0.012 + 0.022 * self.drift) * direction
+        rotation = self._rotation_amount()
         total_angle = star_angle + rotation
 
-        max_r = min(self.width, self.height / CHAR_ASPECT) * 0.46
+        x_radius, y_radius = self._screen_radii()
 
         core_fraction = 0.12
         if star_dist < core_fraction:
             t = star_dist / core_fraction
-            radius = t * max_r * 0.15
+            radius = t * x_radius * 0.15
         else:
             t = (star_dist - core_fraction) / (1.0 - core_fraction)
-            spiral_turns = t * self.twist * 1.5
-            radius = max_r * (0.15 + t * 0.85)
+            spiral_turns = t * self.TWIST * 1.5
+            radius = x_radius * (0.15 + t * 0.85)
             total_angle += spiral_turns * math.tau
 
         x = radius * math.cos(total_angle)
-        y = radius * math.sin(total_angle) * CHAR_ASPECT
+        y_scale = y_radius / max(1.0, x_radius)
+        y = radius * math.sin(total_angle) * y_scale
         return x, y, radius
 
     def _arm_density(self, angle: float, radius: float) -> float:
         if radius < 0.3:
             return 0.0
-        max_r = min(self.width, self.height / CHAR_ASPECT) * 0.46
-        r_norm = radius / max_r if max_r > 0 else 0
+        x_radius, _ = self._screen_radii()
+        r_norm = radius / x_radius if x_radius > 0 else 0
         best = 0.0
-        for i in range(self.arms):
-            arm_angle = i * math.tau / self.arms
+        for i in range(self.ARMS):
+            arm_angle = i * math.tau / self.ARMS
             diff = (angle - arm_angle) % math.tau
             if diff > math.pi:
                 diff = math.tau - diff
-            base_width = 0.38 + 0.18 * self.twist
+            base_width = 0.38 + 0.18 * self.TWIST
             r_factor = max(0.4, 1.0 - r_norm * 0.6)
             arm_width = base_width * r_factor
             density = math.exp(-(diff ** 2) / (arm_width ** 2))
@@ -144,7 +157,7 @@ class GalaxyVisualizer(BaseVisualizer):
         return best
 
     def _dust_attenuation(self, x: float, y: float, time: float) -> float:
-        if self.dust < 0.01:
+        if self.DUST < 0.01:
             return 1.0
         dust_phase = time * 0.025
         dust_x = x * 0.5 + math.sin(y * 0.2 + dust_phase) * 4.0
@@ -152,22 +165,21 @@ class GalaxyVisualizer(BaseVisualizer):
         dust_val = (math.sin(dust_x * 0.4 + dust_y * 0.25) *
                     math.cos(dust_x * 0.3 - dust_y * 0.35 + dust_phase))
         dust_val = (dust_val + 1.0) * 0.5
-        return 1.0 - self.dust * dust_val * 0.65
+        return 1.0 - self.DUST * dust_val * 0.65
 
     def _core_glow(self, radius: float) -> float:
-        if self.core < 0.01:
+        if self.CORE < 0.01:
             return 0.0
-        core_r = 2.0 + self.core * 4.5
+        core_r = 2.0 + self.CORE * 4.5
         if radius >= core_r:
             return 0.0
-        return ((core_r - radius) / core_r) ** 1.8 * self.core
+        return ((core_r - radius) / core_r) ** 1.8 * self.CORE
 
     def render_frame(self) -> str:
         cx = self.width / 2.0
         cy = self.height / 2.0
-        max_r = min(self.width, self.height / CHAR_ASPECT) * 0.46
-        direction = -1 if self.reversed else 1
-        current_rotation = self.frame * (0.012 + 0.022 * self.drift) * direction
+        max_r, _ = self._screen_radii()
+        current_rotation = self._rotation_amount()
 
         cells: dict[tuple[int, int], tuple[float, str, str]] = {}
 
@@ -229,8 +241,7 @@ class GalaxyVisualizer(BaseVisualizer):
             color = self._color(color_code)
             cells[key] = (effective_brightness, color, char)
 
-        core_visual_radius = 2.0 + self.core * 4.5
-        core_center_intensity = 0.65 + self.core * 0.45
+        core_center_intensity = 0.65 + self.CORE * 0.45
         for dy in range(-5, 6):
             for dx in range(-5, 6):
                 dist = math.sqrt(dx * dx + dy * dy)

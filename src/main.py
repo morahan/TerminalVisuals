@@ -39,7 +39,7 @@ def parse_args():
         "--depth", type=float, default=0.22, help="Halo tilt depth (default: 0.22)"
     )
     galaxy_group.add_argument(
-        "--drift", type=float, default=1.5, help="Precession drift intensity (default: 1.5)"
+        "--drift", type=float, default=0.75, help="Precession drift intensity (default: 0.75)"
     )
 
     spiral_group = parser.add_argument_group("Spiral Options")
