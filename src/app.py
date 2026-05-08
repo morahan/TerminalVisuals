@@ -11,12 +11,20 @@ from src.base import (
     BaseVisualizer, INPUT_QUIT, INPUT_LEFT, INPUT_RIGHT,
     INPUT_UP, INPUT_DOWN, INPUT_ENJOY, INPUT_SPACE,
     INPUT_FULLSCREEN, INPUT_ESCAPE, INPUT_REVERSE, HUD_ROWS,
+    INPUT_SETTINGS, INPUT_LOCK, INPUT_YES, INPUT_NO, INPUT_UNLOCK,
 )
 from src.crash_report import (
     CrashReportResult,
     CrashReporter,
     DEFAULT_REPORTING,
-    request_crash_reporting_consent,
+)
+from src.settings import (
+    clear_locked_animation,
+    crash_reporting_state_requires_consent,
+    load_settings,
+    save_crash_reporting_opt_in,
+    save_locked_animation,
+    settings_file_path,
 )
 from src.waves import WaveVisualizer
 from src.galaxy import GalaxyVisualizer
@@ -33,6 +41,11 @@ MODE_NAMES = ["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple",
 
 # Onboarding hint fades after this many frames
 HINT_FRAMES = 240
+
+SCREEN_NORMAL = "normal"
+SCREEN_CONSENT = "consent"
+SCREEN_SETTINGS = "settings"
+SCREEN_OPT_OUT_LOCKED = "opt_out_locked"
 
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
@@ -121,7 +134,7 @@ class TerminalSession:
 class App:
     def __init__(
         self,
-        start_mode: str = "waves",
+        start_mode: str | None = None,
         size: int = 0,
         speed: int = 5,
         brightness: int = 100,
@@ -147,7 +160,13 @@ class App:
         skyline_glow: int = 3,
         crash_reporting: str = DEFAULT_REPORTING,
         crash_report_dir: str | None = None,
+        settings_path: str | os.PathLike | None = None,
     ):
+        self.settings_path = settings_file_path(settings_path)
+        self.settings = load_settings(settings_path)
+        self.start_mode_explicit = start_mode is not None
+        resolved_mode = self._resolve_start_mode(start_mode)
+
         common = dict(size=size, speed=speed, brightness=brightness,
                       ascii_mode=ascii_mode, oneshot=oneshot)
 
@@ -162,26 +181,71 @@ class App:
             ZenVisualizer(**common, rake_width=rake_width, level=zen_level),
             SkylineVisualizer(**common, city=skyline_city, glow=skyline_glow),
         ]
-        self.index = MODE_NAMES.index(start_mode) if start_mode in MODE_NAMES else 0
+        self.index = MODE_NAMES.index(resolved_mode) if resolved_mode in MODE_NAMES else 0
+        if not self.start_mode_explicit:
+            self._apply_locked_startup()
         self.fullscreen = False
         self.total_frames = 0  # tracks frames across mode switches for hint fade
         self.crash_reporting = crash_reporting
         self.crash_report_dir = crash_report_dir
         self._stop_requested = False
         self._terminal_session: TerminalSession | None = None
+        self._crash_reporter: CrashReporter | None = None
+        self.screen = (
+            SCREEN_CONSENT
+            if crash_reporting_state_requires_consent(self.settings, reporting=self.crash_reporting)
+            else SCREEN_NORMAL
+        )
+        self._status_message = ""
+        self._status_frames = 0
 
     @property
     def current(self) -> BaseVisualizer:
         return self.visualizers[self.index]
 
+    def _resolve_start_mode(self, start_mode: str | None) -> str:
+        if start_mode in MODE_NAMES:
+            return start_mode
+        if start_mode is None and self.settings.locked_mode in MODE_NAMES:
+            return str(self.settings.locked_mode)
+        return "waves"
+
+    def _apply_locked_startup(self) -> None:
+        if self.settings.locked_mode not in MODE_NAMES:
+            return
+        if MODE_NAMES[self.index] != self.settings.locked_mode:
+            return
+        self._apply_slider_values(self.current, self.settings.locked_sliders)
+
+    def _apply_slider_values(
+        self,
+        vis: BaseVisualizer,
+        values: dict[str, float | int],
+    ) -> None:
+        for slider in vis.sliders:
+            if slider.attr not in values:
+                continue
+            raw_value = values[slider.attr]
+            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                continue
+            value = min(slider.max_val, max(slider.min_val, raw_value))
+            if slider.fmt == "d" or (
+                slider.step == int(slider.step)
+                and slider.min_val == int(slider.min_val)
+                and slider.max_val == int(slider.max_val)
+            ):
+                value = int(value)
+            setattr(vis, slider.attr, value)
+        vis._needs_full_clear = True
+
     def run(self) -> None:
         self._stop_requested = False
-        github_opt_in = request_crash_reporting_consent(reporting=self.crash_reporting)
         reporter = CrashReporter.from_environment(
             reporting=self.crash_reporting,
             report_dir=self.crash_report_dir,
-            github_opt_in=github_opt_in,
+            github_opt_in=self._github_crash_reporting_opt_in(),
         )
+        self._crash_reporter = reporter
         session = self._make_terminal_session()
         exc_info = None
         try:
@@ -189,7 +253,8 @@ class App:
             while not self._stop_requested:
                 vis = self.current
                 vis._old_term_settings = session.term_settings
-                vis.set_hud_rows(0 if self.fullscreen else HUD_ROWS)
+                hud_rows = 0 if self.fullscreen or self.screen != SCREEN_NORMAL else HUD_ROWS
+                vis.set_hud_rows(hud_rows)
 
                 result = vis.run_loop(
                     on_frame=self._draw_hud,
@@ -218,6 +283,7 @@ class App:
             except Exception as report_error:  # noqa: BLE001 - terminal already recovered
                 print(f"Freio crashed; crash reporting also failed: {report_error}", file=sys.stderr)
             raise SystemExit(1)
+        self._crash_reporter = None
 
     def _make_terminal_session(self) -> TerminalSession:
         session = TerminalSession(self._request_stop)
@@ -228,6 +294,17 @@ class App:
         self._stop_requested = True
         for vis in self.visualizers:
             vis.running = False
+
+    def _github_crash_reporting_opt_in(self) -> bool:
+        if self.crash_reporting.lower() == "off":
+            return False
+        if os.environ.get("FREIO_CRASH_REPORTING", "").lower() == "off":
+            return False
+        return self.settings.crash_reporting_enabled
+
+    def _sync_reporter_opt_in(self) -> None:
+        if self._crash_reporter is not None:
+            self._crash_reporter.github_opt_in = self._github_crash_reporting_opt_in()
 
     def _crash_context(self, session: TerminalSession) -> dict:
         cols, rows = self.current._get_terminal_size()
@@ -258,7 +335,16 @@ class App:
             print(f"GitHub issue submission failed: {result.error}", file=sys.stderr)
 
     def _handle_event(self, event: int) -> bool:
+        if self.screen == SCREEN_CONSENT:
+            return self._handle_consent_event(event)
+        if self.screen == SCREEN_SETTINGS:
+            return self._handle_settings_event(event)
+        if self.screen == SCREEN_OPT_OUT_LOCKED:
+            return True
+
         vis = self.current
+        if event == INPUT_SPACE:
+            return False
         if event == INPUT_LEFT:
             vis.adjust_slider(0, -1)
         elif event == INPUT_RIGHT:
@@ -273,10 +359,63 @@ class App:
             self._set_fullscreen(False)
         elif event == INPUT_REVERSE:
             vis.reverse()
+        elif event == INPUT_SETTINGS:
+            self.screen = SCREEN_SETTINGS
+        elif event == INPUT_LOCK:
+            self._lock_current_animation()
+        else:
+            return False
         return True
+
+    def _handle_consent_event(self, event: int) -> bool:
+        if event == INPUT_YES:
+            self.settings = save_crash_reporting_opt_in(True, self.settings_path)
+            self._sync_reporter_opt_in()
+            self.screen = SCREEN_NORMAL
+            self._set_status("Crash reporting opted in")
+        elif event == INPUT_NO:
+            self.settings = save_crash_reporting_opt_in(False, self.settings_path)
+            self._sync_reporter_opt_in()
+            self.screen = SCREEN_OPT_OUT_LOCKED
+        return True
+
+    def _handle_settings_event(self, event: int) -> bool:
+        if event in (INPUT_SETTINGS, INPUT_ESCAPE):
+            self.screen = SCREEN_NORMAL
+        elif event == INPUT_LOCK:
+            self._lock_current_animation()
+        elif event == INPUT_UNLOCK:
+            self.settings = clear_locked_animation(self.settings_path)
+            self._set_status("Opening animation lock cleared")
+        elif event == INPUT_YES:
+            self.settings = save_crash_reporting_opt_in(True, self.settings_path)
+            self._sync_reporter_opt_in()
+            self._set_status("Crash reporting opted in")
+        elif event == INPUT_NO:
+            self.settings = save_crash_reporting_opt_in(False, self.settings_path)
+            self._sync_reporter_opt_in()
+            self.screen = SCREEN_OPT_OUT_LOCKED
+        return True
+
+    def _lock_current_animation(self) -> None:
+        mode = MODE_NAMES[self.index]
+        sliders = {slider.attr: getattr(self.current, slider.attr) for slider in self.current.sliders}
+        self.settings = save_locked_animation(mode, sliders, self.settings_path)
+        self._set_status(f"Opening animation locked to {mode}")
+
+    def _set_status(self, message: str) -> None:
+        self._status_message = message
+        self._status_frames = 90
 
     def _draw_hud(self) -> str:
         self.total_frames += 1
+
+        if self.screen == SCREEN_CONSENT:
+            return self._draw_consent_screen()
+        if self.screen == SCREEN_SETTINGS:
+            return self._draw_settings_screen()
+        if self.screen == SCREEN_OPT_OUT_LOCKED:
+            return self._draw_opt_out_lock()
 
         if self.fullscreen:
             return ""
@@ -325,7 +464,10 @@ class App:
 
         # --- Onboarding hint (fades after HINT_FRAMES) ---
         hint_str = ""
-        if self.total_frames < HINT_FRAMES:
+        if self._status_frames > 0 and self._status_message:
+            hint_str = f"\033[92m{self._status_message}\033[0m"
+            self._status_frames -= 1
+        elif self.total_frames < HINT_FRAMES:
             opacity = max(0, HINT_FRAMES - self.total_frames) / HINT_FRAMES
             if opacity > 0.5:
                 hint_color = "\033[90m"
@@ -372,6 +514,153 @@ class App:
                 out.append(f"\033[{y_hint};1H\033[2K\033[{y_hint};{pad_h}H{hint_str}")
 
         return "".join(out)
+
+    def _draw_consent_screen(self) -> str:
+        lines = [
+            "Freio Labs, LLC",
+            "",
+            "Crash reporting is optional. Freio can save local crash logs and,",
+            "when GitHub reporting is configured, submit or update crash issues.",
+            "",
+            "Reports may include mode, terminal size, Python and OS details,",
+            "command-line arguments, and a traceback. Your home directory and",
+            "GitHub token are redacted before reports are written or submitted.",
+            "",
+            "Y  Opt in and continue",
+            "N  Opt out and lock this run",
+            "Q  Quit",
+        ]
+        return self._draw_panel("Crash Reporting Consent", lines)
+
+    def _draw_settings_screen(self) -> str:
+        locked = "none"
+        if self.settings.locked_mode in MODE_NAMES:
+            sliders = self.settings.locked_sliders
+            if sliders:
+                slider_text = ", ".join(f"{key}={value}" for key, value in sliders.items())
+                locked = f"{self.settings.locked_mode} ({slider_text})"
+            else:
+                locked = str(self.settings.locked_mode)
+
+        crash_status = "opted in" if self.settings.crash_reporting_enabled else "not opted in"
+        lines = [
+            f"Crash reporting: {crash_status}",
+            f"GitHub reporting: {self._github_reporting_status()}",
+            f"Opening animation: {locked}",
+            f"Settings path: {self.settings_path}",
+            "",
+            "Y  Opt in to crash reporting",
+            "N  Opt out and lock this run",
+            "L  Lock current animation",
+            "U  Clear opening animation lock",
+            "S / Esc  Close settings",
+            "Q  Quit",
+        ]
+        return self._draw_panel("Settings", lines)
+
+    def _draw_opt_out_lock(self) -> str:
+        try:
+            cols = os.get_terminal_size().columns
+            rows = os.get_terminal_size().lines
+        except OSError:
+            cols, rows = 80, 24
+        cols = max(1, cols)
+        rows = max(1, rows)
+
+        out = [BaseVisualizer.ANSI_HOME]
+        phase = int(self.current.frame) % 16
+        ribbon = (" " * phase + "OPT OUT   ") * (cols // 8 + 3)
+        for row in range(1, rows + 1):
+            shade = "\033[2;31m" if row % 2 else "\033[2;37m"
+            text = ribbon[:cols] if row % 2 else ribbon[::-1][:cols]
+            out.append(f"\033[{row};1H\033[2K{shade}{text}\033[0m")
+
+        center_lines = [
+            "\033[91;1mOPT OUT\033[0m",
+            "\033[37mCrash reporting declined.\033[0m",
+            "\033[90mFreio is locked for this run. Press q to exit.\033[0m",
+        ]
+        start_y = max(1, rows // 2 - 1)
+        for offset, line in enumerate(center_lines):
+            plain_len = len(_ANSI_RE.sub("", line))
+            col = max(1, (cols - plain_len) // 2 + 1)
+            out.append(f"\033[{start_y + offset};{col}H{line}")
+        return "".join(out)
+
+    def _draw_panel(self, title: str, lines: list[str]) -> str:
+        try:
+            cols = os.get_terminal_size().columns
+            rows = os.get_terminal_size().lines
+        except OSError:
+            cols, rows = 80, 24
+        cols = max(1, cols)
+        rows = max(1, rows)
+
+        width = max(1, min(76, max(24, cols - 4), cols))
+        inner_width = max(1, width - 4)
+        wrapped: list[str] = []
+        for line in lines:
+            wrapped.extend(self._wrap_panel_line(line, inner_width))
+        height = min(rows, len(wrapped) + 6)
+        top = max(1, (rows - height) // 2 + 1)
+        left = max(1, (cols - width) // 2 + 1)
+
+        out = [BaseVisualizer.ANSI_HOME]
+        for row in range(1, rows + 1):
+            out.append(f"\033[{row};1H\033[2K\033[40m{' ' * cols}\033[0m")
+
+        border = "-" * max(0, width - 2)
+        out.append(f"\033[{top};{left}H\033[90m+{border}+\033[0m")
+        title_text = self._clip(title, inner_width)
+        out.append(f"\033[{top + 1};{left}H\033[90m|\033[0m \033[97;1m{title_text:<{inner_width}}\033[0m \033[90m|\033[0m")
+        out.append(f"\033[{top + 2};{left}H\033[90m+{border}+\033[0m")
+
+        body_rows = max(0, height - 5)
+        for idx in range(body_rows):
+            text = wrapped[idx] if idx < len(wrapped) else ""
+            text = self._clip(text, inner_width)
+            color = "\033[96m" if "  " in text[:3] else "\033[37m"
+            out.append(
+                f"\033[{top + 3 + idx};{left}H\033[90m|\033[0m "
+                f"{color}{text:<{inner_width}}\033[0m \033[90m|\033[0m"
+            )
+        out.append(f"\033[{top + height - 1};{left}H\033[90m+{border}+\033[0m")
+        return "".join(out)
+
+    def _wrap_panel_line(self, line: str, width: int) -> list[str]:
+        if not line:
+            return [""]
+        chunks: list[str] = []
+        current = ""
+        for word in line.split(" "):
+            next_value = word if not current else f"{current} {word}"
+            if len(next_value) <= width:
+                current = next_value
+                continue
+            if current:
+                chunks.append(current)
+            current = word
+            while len(current) > width:
+                chunks.append(current[:width])
+                current = current[width:]
+        chunks.append(current)
+        return chunks
+
+    def _clip(self, value: str, width: int) -> str:
+        if len(value) <= width:
+            return value
+        if width <= 1:
+            return value[:width]
+        return value[: width - 1] + "."
+
+    def _github_reporting_status(self) -> str:
+        if self.crash_reporting.lower() == "off":
+            return "disabled by --crash-reporting off"
+        if os.environ.get("FREIO_CRASH_REPORTING", "").lower() == "off":
+            return "disabled by FREIO_CRASH_REPORTING=off"
+        if os.environ.get("FREIO_GITHUB_REPO") and os.environ.get("FREIO_GITHUB_TOKEN"):
+            return "configured and opted in" if self.settings.crash_reporting_enabled else "configured, awaiting opt-in"
+        return "not configured"
 
     def _set_fullscreen(self, fullscreen: bool) -> None:
         if self.fullscreen == fullscreen:

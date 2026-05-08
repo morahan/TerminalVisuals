@@ -10,8 +10,8 @@ def parse_args():
     parser.add_argument(
         "--mode",
         choices=["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple", "zen", "skyline"],
-        default="waves",
-        help="Starting visualization mode (default: waves)",
+        default=None,
+        help="Starting visualization mode (overrides any saved opening animation)",
     )
     parser.add_argument("--size", type=int, default=0, help="Grid size (0=auto-fit terminal)")
     parser.add_argument(

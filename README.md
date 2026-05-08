@@ -11,7 +11,7 @@ pipx install -e .
 ## Usage
 
 ```bash
-freio                    # auto-fits terminal, starts in waves mode
+freio                    # auto-fits terminal, using your saved opening animation or waves
 freio --mode galaxy      # start in galaxy mode
 freio --mode spiral      # start in droid spiral mode
 freio --mode skyline     # start in the cinematic shuffled skyline tour
@@ -27,6 +27,8 @@ freio --size 31          # fixed grid size
 | Up / Down      | Adjust slider 2 (feel)          |
 | f              | Toggle fullscreen HUD-free mode |
 | e              | Toggle enjoy/fullscreen mode    |
+| S              | Open or close settings          |
+| L              | Lock current animation as opening default |
 | Esc            | Exit fullscreen and restore HUD |
 | q              | Quit                            |
 
@@ -45,7 +47,7 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 
 | Flag           | Default | Description                          |
 |----------------|---------|--------------------------------------|
-| `--mode`       | waves   | Starting mode: `waves`, `galaxy`, `spiral`, `dyson`, `aurora`, `ember`, `ripple`, `zen`, `skyline` |
+| `--mode`       | saved lock or waves | Starting mode override: `waves`, `galaxy`, `spiral`, `dyson`, `aurora`, `ember`, `ripple`, `zen`, `skyline` |
 | `--size`       | auto    | Grid size (0 = fit to terminal)      |
 | `--speed`      | 5       | Animation speed (higher = faster)    |
 | `--brightness` | 100     | Brightness percentage                |
@@ -68,11 +70,13 @@ Python 3.10+ (no external dependencies)
 
 ## Crash Reporting & Privacy
 
-Freio includes a small opt-in crash reporting sequence from Freio Labs, LLC. By enabling crash reporting, you agree that crash logs may be drafted for submission as GitHub issues so the developers and agents maintaining the app can diagnose terminal and cursor crashes.
+Freio includes a small in-app opt-in crash reporting screen from Freio Labs, LLC. By enabling crash reporting, you agree that crash logs may be drafted for submission as GitHub issues so the developers and agents maintaining the app can diagnose terminal and cursor crashes.
 
 Crash logs may include the active visualization mode, terminal size, Python and OS details, command-line arguments, and a traceback. Freio redacts your home directory and GitHub token before writing or submitting reports. Local crash reports are written to your user cache directory by default.
 
-GitHub issue submission requires opt-in plus `FREIO_GITHUB_REPO=owner/repo` and `FREIO_GITHUB_TOKEN`. To opt out, run `freio --crash-reporting off` or set `FREIO_CRASH_REPORTING=off`.
+GitHub issue submission requires opt-in plus `FREIO_GITHUB_REPO=owner/repo` and `FREIO_GITHUB_TOKEN`. To opt out, choose `N` on the consent or settings screen, run `freio --crash-reporting off`, or set `FREIO_CRASH_REPORTING=off`.
+
+Settings are stored locally in your Freio config directory as `settings.json`. Press `S` in the app to view the path, opt in or out, and manage the saved opening animation.
 
 If you are feeling generous, submit a PR with a fix! :-)
 

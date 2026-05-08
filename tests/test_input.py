@@ -1,16 +1,23 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from src import base
-from src.app import App
+from src.app import App, SCREEN_NORMAL
 from src.base import (
     BaseVisualizer,
     INPUT_DOWN,
     INPUT_ESCAPE,
     INPUT_LEFT,
+    INPUT_LOCK,
     INPUT_NONE,
+    INPUT_NO,
     INPUT_RIGHT,
+    INPUT_SETTINGS,
     INPUT_UP,
+    INPUT_UNLOCK,
+    INPUT_YES,
 )
 
 
@@ -83,8 +90,28 @@ class InputTests(unittest.TestCase):
         self.assertEqual(self._read_event("\x1b"), INPUT_ESCAPE)
         self.assertEqual(self._read_event("\x1b["), INPUT_NONE)
 
+    def test_settings_consent_and_lock_keys_decode(self):
+        cases = {
+            "s": INPUT_SETTINGS,
+            "S": INPUT_SETTINGS,
+            "l": INPUT_LOCK,
+            "L": INPUT_LOCK,
+            "y": INPUT_YES,
+            "Y": INPUT_YES,
+            "n": INPUT_NO,
+            "N": INPUT_NO,
+            "u": INPUT_UNLOCK,
+            "U": INPUT_UNLOCK,
+        }
+
+        for data, expected in cases.items():
+            with self.subTest(data=data):
+                self.assertEqual(self._read_event(data), expected)
+
     def test_escape_only_leaves_fullscreen(self):
-        app = App(size=4)
+        with tempfile.TemporaryDirectory() as tmp:
+            app = App(size=4, settings_path=Path(tmp) / "settings.json")
+        app.screen = SCREEN_NORMAL
 
         app.current.running = True
         app._handle_event(INPUT_ESCAPE)

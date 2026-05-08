@@ -27,6 +27,11 @@ INPUT_SPACE = 9
 INPUT_FULLSCREEN = 10
 INPUT_ESCAPE = 11
 INPUT_REVERSE = 12
+INPUT_SETTINGS = 13
+INPUT_LOCK = 14
+INPUT_YES = 15
+INPUT_NO = 16
+INPUT_UNLOCK = 17
 
 
 @dataclass
@@ -180,10 +185,11 @@ class BaseVisualizer(ABC):
             event = self._check_input()
             if event == INPUT_QUIT:
                 return INPUT_QUIT
-            if event == INPUT_SPACE:
-                return INPUT_SPACE
+            handled = False
             if event != INPUT_NONE and on_event:
-                on_event(event)
+                handled = on_event(event)
+            if event == INPUT_SPACE and not handled:
+                return INPUT_SPACE
 
             self._update_size()
             output = self.clear_screen() + self.render_frame()
@@ -233,6 +239,16 @@ class BaseVisualizer(ABC):
                 return INPUT_FULLSCREEN
             if ch in ("r", "R"):
                 return INPUT_REVERSE
+            if ch in ("s", "S"):
+                return INPUT_SETTINGS
+            if ch in ("l", "L"):
+                return INPUT_LOCK
+            if ch in ("y", "Y"):
+                return INPUT_YES
+            if ch in ("n", "N"):
+                return INPUT_NO
+            if ch in ("u", "U"):
+                return INPUT_UNLOCK
             if ch == " ":
                 return INPUT_SPACE
             if ch == "\x1b":
