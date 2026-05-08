@@ -17,11 +17,11 @@ class DysonVisualizer(BaseVisualizer):
     }
 
     sliders = [
-        Slider(name="Spread", attr="spread", min_val=0.10, max_val=0.60, step=0.05, fmt=".2f"),
+        Slider(name="Quantity", attr="sats_per_ring", min_val=8, max_val=64, step=4, fmt="d"),
         Slider(name="Orbit", attr="orbit_speed", min_val=0.5, max_val=3.0, step=0.25),
     ]
 
-    SATS_PER_RING = 28
+    LOCKED_SPREAD = 0.60
     SPAWN_INTERVAL = 8
     MAX_RINGS = 5
     GLOW_DECAY = 0.94
@@ -52,10 +52,12 @@ class DysonVisualizer(BaseVisualizer):
         oneshot: bool = False,
         spread: float = 0.30,
         orbit_speed: float = 1.5,
+        sats_per_ring: int = 28,
     ):
         super().__init__(size, speed, brightness, ascii_mode, oneshot)
-        self.spread = spread
+        self.spread = self.LOCKED_SPREAD
         self.orbit_speed = orbit_speed
+        self.sats_per_ring = sats_per_ring
         self.stars = self._generate_stars()
         self._glow: dict[tuple[int, int], tuple[int, float]] = {}  # (y, x) -> (ring_idx, intensity)
 
@@ -109,7 +111,7 @@ class DysonVisualizer(BaseVisualizer):
         cy = self.height / 2.0
         R = min(self.width * 0.42, self.height / CHAR_ASPECT * 0.42)
 
-        max_sats = self.MAX_RINGS * self.SATS_PER_RING
+        max_sats = self.MAX_RINGS * self.sats_per_ring
         total_spawned = int(min(self.frame // self.SPAWN_INTERVAL + 1, max_sats))
 
         direction = -1 if self.reversed else 1
@@ -125,7 +127,7 @@ class DysonVisualizer(BaseVisualizer):
         points = []
         spawned = 0
         for ring_idx in range(self.MAX_RINGS):
-            ring_count = min(self.SATS_PER_RING, total_spawned - spawned)
+            ring_count = min(self.sats_per_ring, total_spawned - spawned)
             if ring_count <= 0:
                 break
 
@@ -135,7 +137,7 @@ class DysonVisualizer(BaseVisualizer):
             beta = beta_off + cam_b
 
             for s in range(ring_count):
-                base_angle = s * 2 * math.pi / self.SATS_PER_RING
+                base_angle = s * 2 * math.pi / self.sats_per_ring
                 theta = base_angle + self.frame * 0.02 * self.orbit_speed * speed_mult * direction
 
                 sx, sy, z = self._project(theta, alpha, beta, R, cx, cy)
