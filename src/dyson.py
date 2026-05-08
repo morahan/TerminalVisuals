@@ -21,9 +21,11 @@ class DysonVisualizer(BaseVisualizer):
         Slider(name="Orbit", attr="orbit_speed", min_val=0.5, max_val=3.0, step=0.25),
     ]
 
-    SATS_PER_RING = 18
+    SATS_PER_RING = 28
     SPAWN_INTERVAL = 8
     MAX_RINGS = 5
+    GLOW_DECAY = 0.94
+    GLOW_MIN = 0.05
 
     PALETTE = [
         ("96;1", "36", "2;36"),   # cyan
@@ -55,15 +57,15 @@ class DysonVisualizer(BaseVisualizer):
         self.spread = spread
         self.orbit_speed = orbit_speed
         self.stars = self._generate_stars()
-        self._trail: dict[tuple[int, int], int] = {}  # (y, x) -> ring_idx
+        self._glow: dict[tuple[int, int], tuple[int, float]] = {}  # (y, x) -> (ring_idx, intensity)
 
     def reset(self) -> None:
         super().reset()
-        self._trail.clear()
+        self._glow.clear()
 
     def _on_resize(self) -> None:
         self.stars = self._generate_stars()
-        self._trail.clear()
+        self._glow.clear()
 
     def _generate_stars(self) -> dict[tuple[int, int], float]:
         stars = {}
@@ -143,10 +145,21 @@ class DysonVisualizer(BaseVisualizer):
 
             spawned += ring_count
 
-        # Update persistent trail (only grows, never shrinks)
+        # Decay existing glow
+        faded = []
+        for key, (g_ring, intensity) in self._glow.items():
+            new_i = intensity * self.GLOW_DECAY
+            if new_i < self.GLOW_MIN:
+                faded.append(key)
+            else:
+                self._glow[key] = (g_ring, new_i)
+        for key in faded:
+            del self._glow[key]
+
+        # Reinforce glow at active satellite cells
         for sx, sy, z, ring_idx, age in points:
             if 0 <= sx < self.width and 0 <= sy < self.height:
-                self._trail[(sy, sx)] = ring_idx
+                self._glow[(sy, sx)] = (ring_idx, 1.0)
 
         # Sort active satellites back-to-front for layering
         points.sort(key=lambda p: p[2])
@@ -161,13 +174,21 @@ class DysonVisualizer(BaseVisualizer):
                 sc = self._color("90") if seed > 0.92 and not dim else self._color("2;90")
                 grid[y][x] = f"{sc}{star_char}{self.ANSI_RESET}"
 
-        # Layer 2: persistent trail (dim │ — the orbital path memory)
+        # Layer 2: fading glow trail (subtle, decays after a satellite passes)
         sat_char = self._get_char("sat")
-        for (y, x), ring_idx in self._trail.items():
-            if 0 <= y < self.height and 0 <= x < self.width:
-                _, _, dim_c = self.PALETTE[ring_idx % len(self.PALETTE)]
-                color = self._color("2;90") if dim else self._color(dim_c)
-                grid[y][x] = f"{color}{sat_char}{self.ANSI_RESET}"
+        for (y, x), (ring_idx, intensity) in self._glow.items():
+            if not (0 <= y < self.height and 0 <= x < self.width):
+                continue
+            _, normal_c, dim_c = self.PALETTE[ring_idx % len(self.PALETTE)]
+            if dim:
+                color = self._color("2;90")
+            elif intensity > 0.6:
+                color = self._color(normal_c)
+            elif intensity > 0.25:
+                color = self._color(dim_c)
+            else:
+                color = self._color("2;90")
+            grid[y][x] = f"{color}{sat_char}{self.ANSI_RESET}"
 
         # Layer 3: active satellites (bright, overwrite trail at current positions)
         for sx, sy, z, ring_idx, age in points:
