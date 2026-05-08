@@ -139,8 +139,8 @@ class App:
             vis.adjust_slider(1, -1)
         elif event in (INPUT_ENJOY, INPUT_FULLSCREEN):
             self._set_fullscreen(not self.fullscreen)
-        elif event == INPUT_ESCAPE:
-            vis.running = False
+        elif event == INPUT_ESCAPE and self.fullscreen:
+            self._set_fullscreen(False)
         elif event == INPUT_REVERSE:
             vis.reverse()
         return True
