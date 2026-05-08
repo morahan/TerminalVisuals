@@ -54,7 +54,7 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 | `--wave-count` | 3       | Number of wave layers (waves mode)   |
 | `--no-foam`    | off     | Disable foam highlights              |
 | `--depth`      | 0.22    | Galaxy halo tilt depth               |
-| `--drift`      | 1.5     | Galaxy precession drift intensity    |
+| `--drift`      | 0.75    | Galaxy precession drift intensity    |
 | `--arm-gap`    | 2       | Spiral spacing                       |
 | `--trail`      | 4       | Glow trail length (spiral mode)      |
 | `--skyline-city` | auto  | Skyline city: `auto` or a discovered skyline scene (`newyork`, `paris`, `london`, `tokyo`, `sydney`, `dubai`, plus future scene methods) |
