@@ -229,21 +229,33 @@ class BaseVisualizer(ABC):
             if ch == " ":
                 return INPUT_SPACE
             if ch == "\x1b":
-                # Arrow keys send 3-byte sequences: ESC [ A/B/C/D
-                # Read remaining bytes with generous timeout
+                # Arrow keys are ANSI escape sequences. Collect through the final
+                # command byte so variants like ESC O C and ESC [ 1 ; 5 C work.
                 buf = ""
-                for _ in range(2):
-                    if select.select([sys.stdin], [], [], 0.3)[0]:
-                        buf += sys.stdin.read(1)
-                    else:
+                for _ in range(8):
+                    if not select.select([sys.stdin], [], [], 0.3)[0]:
                         break
-                if buf == "[A":
+                    next_ch = sys.stdin.read(1)
+                    if not next_ch:
+                        break
+                    buf += next_ch
+                    if (
+                        buf.startswith("[")
+                        and len(buf) > 1
+                        and (next_ch.isalpha() or next_ch == "~")
+                    ):
+                        break
+                    if buf.startswith("O") and len(buf) > 1:
+                        break
+                    if len(buf) == 1 and buf not in ("[", "O"):
+                        break
+                if buf in ("[A", "OA") or (buf.startswith("[") and buf.endswith("A")):
                     return INPUT_UP
-                if buf == "[B":
+                if buf in ("[B", "OB") or (buf.startswith("[") and buf.endswith("B")):
                     return INPUT_DOWN
-                if buf == "[C":
+                if buf in ("[C", "OC") or (buf.startswith("[") and buf.endswith("C")):
                     return INPUT_RIGHT
-                if buf == "[D":
+                if buf in ("[D", "OD") or (buf.startswith("[") and buf.endswith("D")):
                     return INPUT_LEFT
                 if not buf:
                     return INPUT_ESCAPE
