@@ -234,45 +234,60 @@ class ZenVisualizer(BaseVisualizer):
 
         direction = -1 if self.reversed else 1
 
-        sweep_rate = max(5.0, sample_total / 72.0)
-        t_sweep = sample_total / sweep_rate
+        sweep_rate = max(3.0, sample_total / 110.0)
+        t_carve = max(40.0, sample_total / sweep_rate)
         t_hold = 12.0
-        t_fade = 26.0
-        cycle = t_sweep + t_hold + t_fade
+        t_erase = max(22.0, w * 0.45)
+        t_rest = 4.0
+        cycle = t_carve + t_hold + t_erase + t_rest
 
-        t = self.frame % cycle
-        sweep_actual = t_sweep * direction
-        if direction > 0:
-            t_normalized = t
-        else:
-            t_normalized = cycle - t
-        if t_normalized < abs(sweep_actual):
-            head_idx = min(sample_total - 1, int(t_normalized * sweep_rate))
-            carved = head_idx + 1
-            settle_bias = 0.02
-            fade = 0.0
+        t_raw = self.frame % cycle
+        t = t_raw if direction > 0 else (cycle - t_raw)
+
+        b_carve = t_carve
+        b_hold = b_carve + t_hold
+        b_erase = b_hold + t_erase
+
+        carve_head = sample_total - 1
+        head_idx = sample_total - 1
+        show_head = False
+        settle_bias = 0.02
+        wind_active = False
+        wind_x = 0.0
+        edge = 2.0
+
+        if t < b_carve:
+            u = t / t_carve
+            eased = u * u * (3.0 - 2.0 * u)
+            carve_head = min(sample_total - 1, int(eased * sample_total))
+            head_idx = carve_head
             show_head = True
-        elif t_normalized < abs(sweep_actual) + t_hold:
-            head_idx = sample_total - 1
-            carved = sample_total
-            settle_bias = 0.28
-            fade = 0.0
-            show_head = False
+        elif t < b_hold:
+            settle_bias = 0.20
+        elif t < b_erase:
+            settle_bias = 0.30
+            wind_active = True
+            u = (t - b_hold) / t_erase
+            wind_x = -edge + u * (w + edge * 2)
         else:
-            head_idx = sample_total - 1
-            carved = sample_total
+            carve_head = -1
             settle_bias = 0.46
-            fade = (t_normalized - abs(sweep_actual) - t_hold) / t_fade
-            show_head = False
 
         grid: list[list[tuple[str, str] | None]] = [[None] * w for _ in range(h)]
         trail_span = max(22.0, sample_total * 0.24)
         inv_trail = 1.0 / trail_span
+        wind_lo = wind_x - edge
 
-        for i in range(carved):
-            age = (carved - 1 - i) * inv_trail * 0.78 + settle_bias + fade * 0.92
-            color = f"\033[{self._age_color_code(age)}m"
+        for i in range(carve_head + 1):
             for x, y, ch in self._sample_footprints[i]:
+                extra_age = 0.0
+                if wind_active:
+                    if x < wind_lo:
+                        continue
+                    if x <= wind_x:
+                        extra_age = 0.55
+                age = (carve_head - i) * inv_trail * 0.78 + settle_bias + extra_age
+                color = f"\033[{self._age_color_code(age)}m"
                 grid[y][x] = (ch, color)
 
         if show_head:
