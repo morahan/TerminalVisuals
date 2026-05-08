@@ -234,11 +234,11 @@ class ZenVisualizer(BaseVisualizer):
 
         direction = -1 if self.reversed else 1
 
-        sweep_rate = max(3.0, sample_total / 110.0)
-        t_carve = max(40.0, sample_total / sweep_rate)
-        t_hold = 12.0
-        t_erase = max(22.0, w * 0.45)
-        t_rest = 4.0
+        sweep_rate = max(1.5, sample_total / 220.0)
+        t_carve = max(80.0, sample_total / sweep_rate)
+        t_hold = 0.0
+        t_erase = max(36.0, w * 0.75)
+        t_rest = 0.0
         cycle = t_carve + t_hold + t_erase + t_rest
 
         t_raw = self.frame % cycle
