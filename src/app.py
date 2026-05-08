@@ -2,12 +2,21 @@ import os
 import re
 import signal
 import sys
-import traceback
+import termios
+import tty
+from types import FrameType
+from typing import Callable
 
 from src.base import (
     BaseVisualizer, INPUT_QUIT, INPUT_LEFT, INPUT_RIGHT,
     INPUT_UP, INPUT_DOWN, INPUT_ENJOY, INPUT_SPACE,
     INPUT_FULLSCREEN, INPUT_ESCAPE, INPUT_REVERSE, HUD_ROWS,
+)
+from src.crash_report import (
+    CrashReportResult,
+    CrashReporter,
+    DEFAULT_REPORTING,
+    request_crash_reporting_consent,
 )
 from src.waves import WaveVisualizer
 from src.galaxy import GalaxyVisualizer
@@ -26,6 +35,87 @@ MODE_NAMES = ["waves", "galaxy", "spiral", "dyson", "aurora", "ember", "ripple",
 HINT_FRAMES = 240
 
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
+class TerminalSession:
+    def __init__(
+        self,
+        request_stop: Callable[[], None],
+        *,
+        stdin=None,
+        stdout=None,
+    ):
+        self.request_stop = request_stop
+        self.stdin = stdin or sys.stdin
+        self.stdout = stdout or sys.stdout
+        self.term_settings = None
+        self.received_signal: int | None = None
+        self._orig_handlers: dict[int, signal.Handlers] = {}
+        self._cursor_hidden = False
+        self._alt_screen = False
+
+    def enter(self) -> None:
+        self._write(BaseVisualizer.ANSI_ALT_SCREEN_ON)
+        self._alt_screen = True
+        self._write(BaseVisualizer.ANSI_HIDE_CURSOR)
+        self._cursor_hidden = True
+        self._set_cbreak_mode()
+        self._install_signal_handler(signal.SIGINT)
+        self._install_signal_handler(signal.SIGTERM)
+
+    def restore(self) -> None:
+        self._write(BaseVisualizer.ANSI_RESET)
+        if self._cursor_hidden:
+            self._write(BaseVisualizer.ANSI_SHOW_CURSOR)
+            self._cursor_hidden = False
+        if self._alt_screen:
+            self._write(BaseVisualizer.ANSI_ALT_SCREEN_OFF)
+            self._alt_screen = False
+        self._restore_terminal_mode()
+        self._restore_signal_handlers()
+
+    def _set_cbreak_mode(self) -> None:
+        try:
+            self.term_settings = termios.tcgetattr(self.stdin)
+            tty.setcbreak(self.stdin.fileno())
+        except (termios.error, AttributeError, OSError, ValueError):
+            self.term_settings = None
+
+    def _restore_terminal_mode(self) -> None:
+        if self.term_settings is None:
+            return
+        try:
+            termios.tcsetattr(self.stdin, termios.TCSADRAIN, self.term_settings)
+        except (termios.error, AttributeError, OSError, ValueError):
+            pass
+        finally:
+            self.term_settings = None
+
+    def _install_signal_handler(self, signum: int) -> None:
+        try:
+            self._orig_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, self._handle_signal)
+        except (AttributeError, OSError, RuntimeError, ValueError):
+            pass
+
+    def _restore_signal_handlers(self) -> None:
+        for signum, handler in self._orig_handlers.items():
+            try:
+                signal.signal(signum, handler)
+            except (AttributeError, OSError, RuntimeError, ValueError):
+                pass
+        self._orig_handlers.clear()
+
+    def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
+        self.received_signal = signum
+        self.request_stop()
+
+    def _write(self, value: str) -> None:
+        try:
+            self.stdout.write(value)
+            self.stdout.flush()
+        except (BrokenPipeError, OSError):
+            pass
 
 
 class App:
@@ -55,6 +145,8 @@ class App:
         zen_level: int = 4,
         skyline_city: int = 0,
         skyline_glow: int = 3,
+        crash_reporting: str = DEFAULT_REPORTING,
+        crash_report_dir: str | None = None,
     ):
         common = dict(size=size, speed=speed, brightness=brightness,
                       ascii_mode=ascii_mode, oneshot=oneshot)
@@ -73,24 +165,30 @@ class App:
         self.index = MODE_NAMES.index(start_mode) if start_mode in MODE_NAMES else 0
         self.fullscreen = False
         self.total_frames = 0  # tracks frames across mode switches for hint fade
+        self.crash_reporting = crash_reporting
+        self.crash_report_dir = crash_report_dir
+        self._stop_requested = False
+        self._terminal_session: TerminalSession | None = None
 
     @property
     def current(self) -> BaseVisualizer:
         return self.visualizers[self.index]
 
     def run(self) -> None:
-        first = self.current
-        first._enter_alt_screen()
-        first._hide_cursor()
-        first._set_raw_mode()
-        self._term_settings = first._old_term_settings
-        self._cursor_hidden = True
-        self._orig_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        self._orig_sigterm = signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        self._stop_requested = False
+        github_opt_in = request_crash_reporting_consent(reporting=self.crash_reporting)
+        reporter = CrashReporter.from_environment(
+            reporting=self.crash_reporting,
+            report_dir=self.crash_report_dir,
+            github_opt_in=github_opt_in,
+        )
+        session = self._make_terminal_session()
+        exc_info = None
         try:
-            while True:
+            session.enter()
+            while not self._stop_requested:
                 vis = self.current
-                vis._old_term_settings = self._term_settings
+                vis._old_term_settings = session.term_settings
                 vis.set_hud_rows(0 if self.fullscreen else HUD_ROWS)
 
                 result = vis.run_loop(
@@ -105,27 +203,59 @@ class App:
                     self.index = (self.index + 1) % len(self.visualizers)
                     self.current.reset()
         except KeyboardInterrupt:
-            pass
+            self._request_stop()
         except Exception:
-            with open("/tmp/freio_crash.log", "w") as f:
-                traceback.print_exc(file=f)
+            exc_info = sys.exc_info()
         finally:
-            self._restore_and_show_cursor()
+            session.restore()
+            for vis in self.visualizers:
+                vis._old_term_settings = None
 
-    def _restore_and_show_cursor(self) -> None:
-        try:
-            sys.stdout.write(self.current.ANSI_RESET)
-            sys.stdout.flush()
-        except (BrokenPipeError, OSError):
-            pass
+        if exc_info is not None:
+            try:
+                result = reporter.report_exception(exc_info, self._crash_context(session))
+                self._print_crash_report_result(result)
+            except Exception as report_error:  # noqa: BLE001 - terminal already recovered
+                print(f"Freio crashed; crash reporting also failed: {report_error}", file=sys.stderr)
+            raise SystemExit(1)
+
+    def _make_terminal_session(self) -> TerminalSession:
+        session = TerminalSession(self._request_stop)
+        self._terminal_session = session
+        return session
+
+    def _request_stop(self) -> None:
+        self._stop_requested = True
         for vis in self.visualizers:
-            vis._restore_mode()
-        if self._cursor_hidden:
-            self._cursor_hidden = False
-            self.current._show_cursor()
-        self.current._exit_alt_screen()
-        signal.signal(signal.SIGINT, self._orig_sigint)
-        signal.signal(signal.SIGTERM, self._orig_sigterm)
+            vis.running = False
+
+    def _crash_context(self, session: TerminalSession) -> dict:
+        cols, rows = self.current._get_terminal_size()
+        return {
+            "mode": MODE_NAMES[self.index],
+            "visualizer": type(self.current).__name__,
+            "frame": self.current.frame,
+            "total_frames": self.total_frames,
+            "fullscreen": self.fullscreen,
+            "terminal": {"columns": cols, "rows": rows},
+            "signal": session.received_signal,
+        }
+
+    def _print_crash_report_result(self, result: CrashReportResult) -> None:
+        print("Freio crashed, but the terminal was restored.", file=sys.stderr)
+        if result.path is not None:
+            print(f"Crash report saved: {result.path}", file=sys.stderr)
+        if result.github_status == "reported" and result.github_url:
+            print(f"GitHub issue updated: {result.github_url}", file=sys.stderr)
+        elif result.github_status == "awaiting_opt_in":
+            print("GitHub issue submission skipped: crash reporting opt-in is not enabled.", file=sys.stderr)
+        elif result.github_status == "not_configured":
+            print(
+                "GitHub issue submission skipped: set FREIO_GITHUB_REPO and FREIO_GITHUB_TOKEN.",
+                file=sys.stderr,
+            )
+        elif result.github_status == "failed":
+            print(f"GitHub issue submission failed: {result.error}", file=sys.stderr)
 
     def _handle_event(self, event: int) -> bool:
         vis = self.current

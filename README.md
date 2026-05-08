@@ -51,6 +51,8 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 | `--brightness` | 100     | Brightness percentage                |
 | `--ascii`      | off     | Use ASCII-only characters            |
 | `--oneshot`    | off     | Run once then exit                   |
+| `--crash-reporting` | auto | Save crash reports and offer opt-in GitHub issue submission (`off` disables) |
+| `--crash-report-dir` | user cache | Directory for local crash report JSON files |
 | `--wave-count` | 3       | Number of wave layers (waves mode)   |
 | `--no-foam`    | off     | Disable foam highlights              |
 | `--depth`      | 0.22    | Galaxy halo tilt depth               |
@@ -63,6 +65,16 @@ Every input maps to exactly one function — no modal selection needed. A brief 
 ## Requirements
 
 Python 3.10+ (no external dependencies)
+
+## Crash Reporting & Privacy
+
+Freio includes a small opt-in crash reporting sequence from Freio Labs, LLC. By enabling crash reporting, you agree that crash logs may be drafted for submission as GitHub issues so the developers and agents maintaining the app can diagnose terminal and cursor crashes.
+
+Crash logs may include the active visualization mode, terminal size, Python and OS details, command-line arguments, and a traceback. Freio redacts your home directory and GitHub token before writing or submitting reports. Local crash reports are written to your user cache directory by default.
+
+GitHub issue submission requires opt-in plus `FREIO_GITHUB_REPO=owner/repo` and `FREIO_GITHUB_TOKEN`. To opt out, run `freio --crash-reporting off` or set `FREIO_CRASH_REPORTING=off`.
+
+If you are feeling generous, submit a PR with a fix! :-)
 
 ## Credits
 

@@ -25,6 +25,17 @@ def parse_args():
     )
     parser.add_argument("--ascii", action="store_true", help="Use ASCII-only characters")
     parser.add_argument("--oneshot", action="store_true", help="Run once, no loop")
+    parser.add_argument(
+        "--crash-reporting",
+        choices=["auto", "off"],
+        default="auto",
+        help="Crash reporting mode (default: auto; use off to disable)",
+    )
+    parser.add_argument(
+        "--crash-report-dir",
+        default=None,
+        help="Directory for local crash report JSON files",
+    )
 
     wave_group = parser.add_argument_group("Wave Options")
     wave_group.add_argument(
@@ -133,6 +144,8 @@ def main():
         zen_level=args.zen_level,
         skyline_city=skyline_city_map[args.skyline_city],
         skyline_glow=args.skyline_glow,
+        crash_reporting=args.crash_reporting,
+        crash_report_dir=args.crash_report_dir,
     )
     app.run()
 
