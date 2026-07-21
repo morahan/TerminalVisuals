@@ -152,6 +152,41 @@ class SkylineVisualizerTests(unittest.TestCase):
 
         self.assertGreater(fog_cells, 0)
 
+    def test_every_cityscape_renders_safely_at_compact_and_wide_sizes(self):
+        """Landmark helpers must remain clipped and usable in small terminals."""
+        clock = FakeClock()
+        for size in (8, 42):
+            for city_name in SkylineVisualizer.city_choices()[1:]:
+                with self.subTest(size=size, city=city_name):
+                    vis = SkylineVisualizer(
+                        size=size,
+                        city=SkylineVisualizer.city_choice_map()[city_name],
+                        ascii_mode=True,
+                        time_source=clock,
+                        rng=random.Random(11),
+                    )
+                    frame = vis.render_frame()
+
+                    self.assertIn(f"\033[{vis.height + 1};1H", frame)
+                    self.assertTrue(any(cell is not None for row in vis._scene(city_name)["grid"] for cell in row))
+
+    def test_paris_cathedral_keeps_two_bell_tower_accents(self):
+        clock = FakeClock()
+        vis = SkylineVisualizer(size=42, city=2, ascii_mode=True, time_source=clock, rng=random.Random(5))
+        scene = vis._scene("paris")
+        horizon = scene["horizon"]
+        cx = int(round(0.825 * (vis.width - 1)))
+        half = max(3, int(round(vis.width * 0.055)))
+
+        for tower_x in (cx - half, cx + half):
+            self.assertTrue(
+                any(
+                    scene["grid"][y][tower_x] is not None
+                    and scene["grid"][y][tower_x][2] in {"accent", "warm_accent"}
+                    for y in range(max(0, horizon - 10), horizon)
+                )
+            )
+
     def test_transition_canvas_is_deterministic(self):
         clock = FakeClock()
         vis = SkylineVisualizer(size=20, city=0, time_source=clock, rng=random.Random(3))
