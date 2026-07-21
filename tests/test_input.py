@@ -8,6 +8,7 @@ from src.app import App, SCREEN_NORMAL
 from src.base import (
     BaseVisualizer,
     INPUT_DOWN,
+    INPUT_COLOR,
     INPUT_ESCAPE,
     INPUT_LEFT,
     INPUT_LOCK,
@@ -42,6 +43,11 @@ class FakeStdin:
         return self.pos < len(self.data)
 
 
+class FakeBufferedFdStdin(FakeStdin):
+    def fileno(self) -> int:
+        return 9
+
+
 def fake_select(reads, writes, errors, timeout=0):
     ready = [stream for stream in reads if getattr(stream, "has_data")()]
     return ready, writes, errors
@@ -69,6 +75,19 @@ class InputTests(unittest.TestCase):
         for data, expected in cases.items():
             with self.subTest(data=repr(data)):
                 self.assertEqual(self._read_event(data), expected)
+
+    def test_arrow_key_is_read_as_one_terminal_byte_chunk(self):
+        """A buffered TextIO stream must not split one arrow press across frames."""
+        stdin = FakeBufferedFdStdin("\x1b[C")
+        vis = InputProbe(size=4)
+        vis._old_term_settings = []
+        with (
+            mock.patch.object(base.sys, "stdin", stdin),
+            mock.patch.object(base.select, "select", fake_select),
+            mock.patch.object(base.os, "read", side_effect=lambda _fd, size: stdin.read(size).encode()),
+        ):
+            self.assertEqual(vis._check_input(), INPUT_RIGHT)
+            self.assertFalse(stdin.has_data())
 
     def test_arrow_keys_decode_application_cursor_sequences(self):
         cases = {
@@ -102,6 +121,8 @@ class InputTests(unittest.TestCase):
             "N": INPUT_NO,
             "u": INPUT_UNLOCK,
             "U": INPUT_UNLOCK,
+            "c": INPUT_COLOR,
+            "C": INPUT_COLOR,
         }
 
         for data, expected in cases.items():

@@ -32,6 +32,7 @@ INPUT_LOCK = 14
 INPUT_YES = 15
 INPUT_NO = 16
 INPUT_UNLOCK = 17
+INPUT_COLOR = 18
 
 
 @dataclass
@@ -86,6 +87,7 @@ class BaseVisualizer(ABC):
         self.running = True
         self.reversed = False
         self._old_term_settings: Optional[list] = None
+        self._input_buffer = ""
         self._last_term_size = self._get_terminal_size()
         self._needs_full_clear = True
 
@@ -224,69 +226,106 @@ class BaseVisualizer(ABC):
             new_val = int(new_val)
         setattr(self, s.attr, new_val)
 
+    def _read_input_chunk(self, timeout: float) -> str:
+        """Read terminal bytes directly, avoiding TextIO's hidden read-ahead buffer."""
+        if not select.select([sys.stdin], [], [], timeout)[0]:
+            return ""
+        try:
+            return os.read(sys.stdin.fileno(), 32).decode(errors="ignore")
+        except (AttributeError, OSError, ValueError):
+            # Keep the input seam testable with stream-like stand-ins.
+            return sys.stdin.read(1)
+
+    @staticmethod
+    def _key_event(ch: str) -> int:
+        key_events = {
+            "q": INPUT_QUIT,
+            "Q": INPUT_QUIT,
+            "e": INPUT_ENJOY,
+            "E": INPUT_ENJOY,
+            "f": INPUT_FULLSCREEN,
+            "F": INPUT_FULLSCREEN,
+            "r": INPUT_REVERSE,
+            "R": INPUT_REVERSE,
+            "s": INPUT_SETTINGS,
+            "S": INPUT_SETTINGS,
+            "l": INPUT_LOCK,
+            "L": INPUT_LOCK,
+            "y": INPUT_YES,
+            "Y": INPUT_YES,
+            "n": INPUT_NO,
+            "N": INPUT_NO,
+            "u": INPUT_UNLOCK,
+            "U": INPUT_UNLOCK,
+            "c": INPUT_COLOR,
+            "C": INPUT_COLOR,
+            " ": INPUT_SPACE,
+        }
+        return key_events.get(ch, INPUT_NONE)
+
+    def _arrow_event(self) -> tuple[int, int]:
+        """Return the decoded event plus the number of buffered bytes consumed."""
+        if not self._input_buffer:
+            return INPUT_ESCAPE, 0
+        prefix = self._input_buffer[0]
+        if prefix == "O":
+            if len(self._input_buffer) < 2:
+                return INPUT_NONE, 0
+            final = self._input_buffer[1]
+            consumed = 2
+        elif prefix == "[":
+            final_idx = next(
+                (idx for idx, char in enumerate(self._input_buffer[1:], start=1) if char.isalpha() or char == "~"),
+                None,
+            )
+            if final_idx is None:
+                return INPUT_NONE, 0
+            final = self._input_buffer[final_idx]
+            consumed = final_idx + 1
+        else:
+            return INPUT_ESCAPE, 0
+        return {
+            "A": INPUT_UP,
+            "B": INPUT_DOWN,
+            "C": INPUT_RIGHT,
+            "D": INPUT_LEFT,
+        }.get(final, INPUT_NONE), consumed
+
     def _check_input(self) -> int:
         if self._old_term_settings is None:
             return INPUT_NONE
         try:
-            if not select.select([sys.stdin], [], [], 0)[0]:
+            if not self._input_buffer:
+                self._input_buffer = self._read_input_chunk(0)
+            if not self._input_buffer:
                 return INPUT_NONE
-            ch = sys.stdin.read(1)
-            if ch in ("q", "Q"):
-                return INPUT_QUIT
-            if ch in ("e", "E"):
-                return INPUT_ENJOY
-            if ch in ("f", "F"):
-                return INPUT_FULLSCREEN
-            if ch in ("r", "R"):
-                return INPUT_REVERSE
-            if ch in ("s", "S"):
-                return INPUT_SETTINGS
-            if ch in ("l", "L"):
-                return INPUT_LOCK
-            if ch in ("y", "Y"):
-                return INPUT_YES
-            if ch in ("n", "N"):
-                return INPUT_NO
-            if ch in ("u", "U"):
-                return INPUT_UNLOCK
-            if ch == " ":
-                return INPUT_SPACE
-            if ch == "\x1b":
-                # Arrow keys are ANSI escape sequences. Collect through the final
-                # command byte so variants like ESC O C and ESC [ 1 ; 5 C work.
-                buf = ""
-                for _ in range(8):
-                    if not select.select([sys.stdin], [], [], 0.3)[0]:
-                        break
-                    next_ch = sys.stdin.read(1)
-                    if not next_ch:
-                        break
-                    buf += next_ch
-                    if (
-                        buf.startswith("[")
-                        and len(buf) > 1
-                        and (next_ch.isalpha() or next_ch == "~")
-                    ):
-                        break
-                    if buf.startswith("O") and len(buf) > 1:
-                        break
-                    if len(buf) == 1 and buf not in ("[", "O"):
-                        break
-                if buf in ("[A", "OA") or (buf.startswith("[") and buf.endswith("A")):
-                    return INPUT_UP
-                if buf in ("[B", "OB") or (buf.startswith("[") and buf.endswith("B")):
-                    return INPUT_DOWN
-                if buf in ("[C", "OC") or (buf.startswith("[") and buf.endswith("C")):
-                    return INPUT_RIGHT
-                if buf in ("[D", "OD") or (buf.startswith("[") and buf.endswith("D")):
-                    return INPUT_LEFT
-                if not buf:
-                    return INPUT_ESCAPE
-                # Unknown sequence — ignore
-                return INPUT_NONE
-        except (OSError, IOError):
+
+            ch = self._input_buffer[0]
+            self._input_buffer = self._input_buffer[1:]
+            if ch != "\x1b":
+                return self._key_event(ch)
+
+            # Arrow keys are escape sequences. Read from the file descriptor rather
+            # than TextIO so all bytes from the first physical keypress stay visible.
+            if not self._input_buffer:
+                self._input_buffer = self._read_input_chunk(0.03)
+            event, consumed = self._arrow_event()
+            for _ in range(8):
+                if event != INPUT_NONE or consumed or self._input_buffer[:1] not in ("[", "O"):
+                    break
+                next_chunk = self._read_input_chunk(0.03)
+                if not next_chunk:
+                    break
+                self._input_buffer += next_chunk
+                event, consumed = self._arrow_event()
+            if consumed:
+                self._input_buffer = self._input_buffer[consumed:]
+            elif self._input_buffer[:1] in ("[", "O"):
+                # Keep an incomplete sequence intact until its final byte arrives.
+                self._input_buffer = "\x1b" + self._input_buffer
+            return event
+        except (OSError, IOError, ValueError):
             return INPUT_NONE
-        return INPUT_NONE
 
     def _set_raw_mode(self) -> None:
         try:
