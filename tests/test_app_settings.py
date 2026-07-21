@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from src.app import App, MODE_NAMES, SCREEN_CONSENT, SCREEN_NORMAL, SCREEN_OPT_OUT_LOCKED, SCREEN_SETTINGS
-from src.base import INPUT_LOCK, INPUT_NO, INPUT_RIGHT, INPUT_SPACE, INPUT_YES
+from src.base import INPUT_COLOR, INPUT_LOCK, INPUT_NO, INPUT_RIGHT, INPUT_SPACE, INPUT_YES
 from src.settings import AppSettings, load_settings, save_settings
 
 
@@ -111,6 +111,19 @@ class AppSettingsBehaviorTests(unittest.TestCase):
             self.assertTrue(app._handle_event(INPUT_SPACE))
 
             self.assertEqual(MODE_NAMES[app.index], "waves")
+
+    def test_color_event_cycles_skyline_colorway_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            save_settings(AppSettings(crash_reporting_opt_in=True), path)
+            with mock.patch.dict(os.environ, {}, clear=True):
+                app = App(start_mode="skyline", size=4, settings_path=path)
+            before = app.current.colorway
+
+            self.assertTrue(app._handle_event(INPUT_COLOR))
+
+            self.assertEqual(app.current.colorway, before + 1)
+            self.assertEqual(app._status_message, "Skyline colors: Moonlight")
 
 
 if __name__ == "__main__":

@@ -187,6 +187,16 @@ class SkylineVisualizerTests(unittest.TestCase):
                 )
             )
 
+    def test_color_cycle_changes_city_palette_without_rebuilding_geometry(self):
+        clock = FakeClock()
+        vis = SkylineVisualizer(size=42, city=2, time_source=clock, rng=random.Random(5))
+        scene = vis._scene("paris")
+        signature_primary = vis._city_style("paris").primary
+
+        self.assertEqual(vis.cycle_color(), "Moonlight")
+        self.assertNotEqual(vis._city_style("paris").primary, signature_primary)
+        self.assertIs(scene, vis._scene("paris"))
+
     def test_transition_canvas_is_deterministic(self):
         clock = FakeClock()
         vis = SkylineVisualizer(size=20, city=0, time_source=clock, rng=random.Random(3))

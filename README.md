@@ -42,6 +42,7 @@ Launch Freio, then use the HUD as your guide. It names the two live settings for
 | `Left` / `Right` | Decrease / increase slider 1 — the mode's shape control |
 | `Up` / `Down` | Increase / decrease slider 2 — the mode's feel or motion control |
 | `r` | Reverse the animation direction |
+| `c` | Cycle Skyline colorways when the Skyline visualizer is active |
 | `f` or `e` | Toggle the HUD-free fullscreen canvas |
 | `Esc` | Leave fullscreen and restore the HUD |
 | `s` | Open or close Settings |

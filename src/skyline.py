@@ -39,6 +39,13 @@ CITY_STYLES = {
     "dubai": CityStyle("\033[93m", "\033[33m", 0.95, 0.82, beams=True, bloom="\033[93m"),
 }
 
+COLORWAYS = (
+    ("Signature", None),
+    ("Moonlight", ("\033[94m", "\033[96m", "\033[97m")),
+    ("Neon", ("\033[95m", "\033[96m", "\033[97m")),
+    ("Sunset", ("\033[91m", "\033[93m", "\033[97m")),
+)
+
 LAYER_BIAS = {
     "star": 0.06,
     "water": 0.12,
@@ -119,6 +126,7 @@ class SkylineVisualizer(BaseVisualizer):
         super().__init__(size, speed, brightness, ascii_mode, oneshot)
         self.city = max(0, min(6, int(city)))
         self.glow = max(1, min(5, int(glow)))
+        self.colorway = 0
         self._time_source = time_source or time.monotonic
         self._london_time_source = london_time_source
         self._rng = rng or random.Random()
@@ -238,7 +246,26 @@ class SkylineVisualizer(BaseVisualizer):
         return self._city_labels.get(int(value), "Auto")
 
     def _city_style(self, city_name: str) -> CityStyle:
-        return CITY_STYLES.get(city_name, CityStyle("\033[96m", "\033[37m", 1.0, 1.0, bloom="\033[97m"))
+        style = CITY_STYLES.get(city_name, CityStyle("\033[96m", "\033[37m", 1.0, 1.0, bloom="\033[97m"))
+        _, palette = COLORWAYS[self.colorway]
+        if palette is None:
+            return style
+        primary, secondary, bloom = palette
+        return CityStyle(
+            primary,
+            secondary,
+            style.accent_rate,
+            style.twinkle_rate,
+            fog=style.fog,
+            petals=style.petals,
+            beams=style.beams,
+            shells=style.shells,
+            bloom=bloom,
+        )
+
+    def cycle_color(self) -> str:
+        self.colorway = (self.colorway + 1) % len(COLORWAYS)
+        return COLORWAYS[self.colorway][0]
 
     def _city_seed(self, city_name: str) -> int:
         if city_name in self._city_order:

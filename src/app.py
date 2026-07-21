@@ -11,7 +11,7 @@ from src.base import (
     BaseVisualizer, INPUT_QUIT, INPUT_LEFT, INPUT_RIGHT,
     INPUT_UP, INPUT_DOWN, INPUT_ENJOY, INPUT_SPACE,
     INPUT_FULLSCREEN, INPUT_ESCAPE, INPUT_REVERSE, HUD_ROWS,
-    INPUT_SETTINGS, INPUT_LOCK, INPUT_YES, INPUT_NO, INPUT_UNLOCK,
+    INPUT_SETTINGS, INPUT_LOCK, INPUT_YES, INPUT_NO, INPUT_UNLOCK, INPUT_COLOR,
 )
 from src.crash_report import (
     CrashReportResult,
@@ -359,6 +359,11 @@ class App:
             self._set_fullscreen(False)
         elif event == INPUT_REVERSE:
             vis.reverse()
+        elif event == INPUT_COLOR:
+            cycle_color = getattr(vis, "cycle_color", None)
+            if not callable(cycle_color):
+                return False
+            self._set_status(f"Skyline colors: {cycle_color()}")
         elif event == INPUT_SETTINGS:
             self.screen = SCREEN_SETTINGS
         elif event == INPUT_LOCK:
@@ -476,11 +481,12 @@ class App:
             else:
                 hint_color = ""
             if hint_color:
+                color_hint = "c colors   " if callable(getattr(vis, "cycle_color", None)) else ""
                 hint_str = (
                     f"{hint_color}space next   "
                     f"\u2190\u2192 {vis.sliders[0].name.lower() if vis.sliders else ''}   "
                     f"\u2191\u2193 {vis.sliders[1].name.lower() if len(vis.sliders) > 1 else ''}   "
-                    f"f fullscreen   e enjoy   r reverse   q quit\033[0m"
+                    f"{color_hint}f fullscreen   e enjoy   r reverse   q quit\033[0m"
                 )
 
         # Layout: 3 lines at bottom (separator, sliders, mode)
