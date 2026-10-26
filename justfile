@@ -27,3 +27,7 @@ once:
 # Claude prompt history
 claude-history:
     @tail -100 ~/.claude_global_prompts.log 2>/dev/null || echo "No prompt log found"
+
+# Source-control matrix for this repo: local/remote branches, open PRs, worktrees, stashes, dirty files, commits vs default branch and origin
+status:
+    @scripts/git-status-matrix.sh
